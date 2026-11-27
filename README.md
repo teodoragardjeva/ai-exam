@@ -13,7 +13,7 @@
 | `src/lib/migrate.ts` | Миграциите и ограничената роля `n8n` (само своя схема `n8n`) |
 | `Dockerfile` | Multi-stage образ, non-root, healthcheck |
 | `.github/workflows/ci.yml` | PR и push към `main`: lint, typecheck, тестове, build, Docker build. На `main` публикува `latest` и пълния sha |
-| `.github/workflows/release.yml` | Таг `vX.Y.Z`: образ `X.Y.Z`, `X.Y`, `latest` и GitHub Release |
+| `.github/workflows/release.yml` | Ръчно (Run workflow с версия) или таг `vX.Y.Z`: проверка за semver, образ `X.Y.Z`, `X.Y`, `latest` и GitHub Release |
 | `deploy/docker-compose.yml` | Стекът за Portainer: `app`, `db`, `n8n` |
 | `deploy/stack.env.example` | Променливите за Portainer |
 | `deploy/nginx-proxy-manager/` | NPM (портове 80, 443, 81) в мрежата `proxy` |
@@ -42,10 +42,18 @@ npm test
 
 ## Release
 
+Версията задължително е semver: `MAJOR.MINOR.PATCH`, напр. `1.2.3`, или pre-release `1.3.0-rc.1`. Всичко друго (`1.2`, `1.2.x`, `01.2.3`, `1.2.3+build`) спира release-а, преди да се публикува нещо.
+
+**Ръчно (препоръчително):** Actions → Release → Run workflow → клон `main` → версия `1.2.3` (`v` отпред не е задължително). Workflow-ът проверява версията, че тагът не съществува, пуска проверките, създава тага `v1.2.3` и прави release.
+
+**С таг от терминала:**
+
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.2.3
+git push origin v1.2.3
 ```
+
+Резултат: образи `1.2.3`, `1.2` и `latest` в GHCR и GitHub Release с бележки. Pre-release (`1.3.0-rc.1`) получава само своя таг, не става `latest` и е маркиран като pre-release.
 
 ## Сървърът (накратко)
 
