@@ -1,0 +1,18 @@
+# Portainer CE on the same server, managing the local Docker engine.
+# Run on the server from /opt/portainer:  docker compose up -d
+# Open https://<droplet IP>:9443 right away and create the admin user:
+# Portainer locks the first-time setup after a few minutes (fix: docker compose restart).
+# The Cloud Firewall must allow 9443 only from your IP.
+
+services:
+  portainer:
+    image: portainer/portainer-ce:lts
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+volumes:
+  portainer_data:
