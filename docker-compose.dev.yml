@@ -1,0 +1,57 @@
+# Local development only: Postgres and n8n in Docker, the app runs with `npm run dev`.
+#   npm run dev:env        # once: creates .env.local with random secrets
+#   npm run dev:services   # starts these containers with values from .env.local
+# No secrets in this file: every value comes from the git-ignored .env.local.
+# Ports are bound to 127.0.0.1, so nothing is exposed outside this computer.
+# For the server use deploy/docker-compose.yml.
+
+name: ai-exam-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run npm run dev:env first}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Needs the "n8n" role, which the app creates on its first start (npm run dev).
+  # Until then n8n restarts on its own; that's expected.
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-app}
+      DB_POSTGRESDB_SCHEMA: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?run npm run dev:env first}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?run npm run dev:env first}
+      GENERIC_TIMEZONE: Europe/Sofia
+      TZ: Europe/Sofia
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  n8n_data:
