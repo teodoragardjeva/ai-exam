@@ -25,7 +25,9 @@
 
 ```bash
 npm ci
-npm run dev        # http://localhost:3000 (без DATABASE_URL миграциите се пропускат)
+npm run dev:env        # веднъж: .env.local със случайни тайни (не влиза в git)
+npm run dev:services   # Postgres (localhost:5432) и n8n (localhost:5678) в Docker
+npm run dev            # http://localhost:3000, при старт създава таблиците и ролята n8n
 npm run lint
 npm run typecheck
 npm test
