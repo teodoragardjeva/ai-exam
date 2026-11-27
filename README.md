@@ -59,14 +59,26 @@ git push origin v1.2.3
 ## Сървърът (накратко)
 
 ```bash
-bash deploy/server-setup.sh                      # фаза B
+bash deploy/server-setup.sh                      # фаза B (включва 2 GB swap)
 cd /opt/portainer && docker compose up -d         # фаза C, после веднага https://<IP>:9443
 cd /opt/nginx-proxy-manager && docker compose up -d   # фаза D, http://<IP>:81
 ```
 
+**Swap:** droplet-ите идват без swap, а 2 GB RAM е тясно за n8n + Postgres + Next.js + NPM. Без swap при пик (старт на n8n, pull на образ) Linux убива контейнер (OOM) и сайтът връща 502. `server-setup.sh` го добавя. Ако сървърът е настроен без скрипта:
+
+```bash
+swapon --show            # празно = няма swap
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-swappiness.conf && sysctl -p /etc/sysctl.d/99-swappiness.conf
+free -h                  # ред Swap: 2.0Gi
+```
+
+Ако `free -h` постоянно показва стотици MB в swap, сървърът е малък: Resize до 4 GB.
+
 Стекът: Portainer → Stacks → Add stack → съдържанието на `deploy/docker-compose.yml` и променливите от `deploy/stack.env.example`. Тайните се генерират с `openssl rand -hex 32` (hex, защото паролата на базата влиза в URL).
 
-NPM proxy host: домейн → `app`, порт `3000`, `http`, сертификат, Force SSL.
+NPM proxy host: домейн → името на app контейнера от `docker ps` (напр. `ai-exam-stack-app-1`, зависи от името на стека), порт `3000`, `http`, сертификат, Force SSL. Без Force SSL (или Cloudflare **Always Use HTTPS**) сайтът се отваря и по `http://`.
 
 ## n8n
 
@@ -75,9 +87,12 @@ NPM proxy host: домейн → `app`, порт `3000`, `http`, сертифи�
   # на сървъра
   docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' $(docker ps -qf name=n8n)
   # на твоя компютър
-  ssh -N -L 5678:<IP на контейнера>:5678 root@<IP на droplet-а>
+  ssh -N -L 15678:<IP на контейнера>:5678 root@<IP на droplet-а>
   ```
-  После `http://localhost:5678`.
+  После `http://localhost:15678`. В PuTTY: Connection → SSH → Tunnels, Source port `15678`, Destination `<IP на контейнера>:5678`.
+- **Портът на тунела е 15678, не 5678:** на 5678 е локалният n8n от `npm run dev:services`. Ако тунелът е на 5678, `localhost:5678` отваря локалния n8n и credential-ите отиват там, а не на сървъра.
+  - `http://localhost:15678` → n8n на **сървъра**
+  - `http://localhost:5678` → **локалният** n8n
 - n8n пази данните си в схемата `n8n` с роля `n8n`. Ролята се създава от app при старт, затова n8n тръгва след като app е healthy.
 - Workflow-ите идват от git: образът `ai-exam-n8n` ги внася и публикува при всеки старт. На сървъра създаваш само credential-ите, веднъж, с имената от workflow-ите (напр. **Header Auth** `Bot secret`: name `x-bot-secret`, value `BOT_SECRET`), и рестартираш n8n. Подробно: `n8n/README.md`.
 - Ако workflow трябва да чете таблици на сайта, дай права в нова миграция, напр. `GRANT SELECT ON contact_messages TO n8n;`.
