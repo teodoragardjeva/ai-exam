@@ -1,0 +1,23 @@
+# Nginx Proxy Manager. Run on the server from /opt/nginx-proxy-manager:
+#   docker network create proxy   (once, if it doesn't exist)
+#   docker compose up -d
+# Admin UI on port 81: the Cloud Firewall must allow 81 only from your IP.
+# Proxy host for the site: forward host "app", port 3000, scheme http.
+
+services:
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
