@@ -25,10 +25,13 @@ services:
       timeout: 5s
       retries: 10
 
+  # Built from n8n/ like the server image: imports and publishes n8n/workflows on start.
+  # After changing a workflow: npm run dev:services -- --build n8n
   # Needs the "n8n" role, which the app creates on its first start (npm run dev).
   # Until then n8n restarts on its own; that's expected.
   n8n:
-    image: n8nio/n8n:latest
+    build: ./n8n
+    image: ai-exam-n8n:dev
     restart: unless-stopped
     environment:
       DB_TYPE: postgresdb
