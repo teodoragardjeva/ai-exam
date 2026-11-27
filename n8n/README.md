@@ -4,7 +4,7 @@ Workflow-ите в `n8n/workflows/*.json` се вграждат в образа 
 
 ## Credential-и на сървъра (веднъж)
 
-1. Отвори редактора през SSH тунел (виж главния README).
+1. Отвори редактора на **сървъра** през SSH тунел на порт **15678** (виж главния README) и влез на `http://localhost:15678`. Не ползвай `localhost:5678`: това е локалният n8n и credential-ът ще се създаде там, а не на сървъра.
 2. **Credentials → Add credential**, с **точно името**, което workflow-ът очаква:
 
    | Workflow | Credential | Тип | Стойност |
@@ -17,7 +17,7 @@ Workflow-ите в `n8n/workflows/*.json` се вграждат в образа 
 
 ## Нов workflow
 
-1. Направи го в n8n (локално: `npm run dev:services`, http://localhost:5678).
+1. Направи го в локалния n8n (`npm run dev:services`, http://localhost:5678).
 2. **⋯ → Download** и запиши JSON-а в `n8n/workflows/<име>.json`.
 3. Добави горе фиксирано `"id"` от точно 16 букви/цифри, уникално, напр. `"id": "orderStatusHook1"`. Без него при всеки старт ще се появява нов дубликат. CI (`npm run check:n8n`) спира build-а, ако липсва.
 4. Credential-ите в JSON-а остават само като препратка (`id` + `name`), без тайни. На сървъра създай credential със същото `name`.
