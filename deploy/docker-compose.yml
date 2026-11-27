@@ -46,8 +46,11 @@ services:
     networks:
       - backend
 
+  # Our n8n image (built from n8n/ by CI): on every start it imports and publishes the
+  # workflows from n8n/workflows. Credentials are created once in the n8n UI with the
+  # names the workflows use (e.g. "Bot secret"); then restart n8n. See n8n/README.md.
   n8n:
-    image: n8nio/n8n:${N8N_VERSION:-latest}
+    image: ghcr.io/teodoragardjeva/ai-exam-n8n:latest
     restart: unless-stopped
     environment:
       # n8n keeps its own data in the "n8n" schema, as the restricted "n8n" role
@@ -67,6 +70,7 @@ services:
       N8N_SECURE_COOKIE: "false"
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_AUTOLOAD_WORKFLOWS: ${N8N_AUTOLOAD_WORKFLOWS:-true}
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:

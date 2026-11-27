@@ -1,5 +1,6 @@
 {
-  "name": "Chat (echo test)",
+  "id": "appChatWebhook01",
+  "name": "App chat webhook",
   "nodes": [
     {
       "parameters": {
@@ -14,7 +15,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [0, 0],
-      "webhookId": "8a7c2f4e-6b1d-4c3a-9e5f-1a2b3c4d5e6f"
+      "webhookId": "8a7c2f4e-6b1d-4c3a-9e5f-1a2b3c4d5e6f",
+      "credentials": {
+        "httpHeaderAuth": { "id": "botSecretHeader1", "name": "Bot secret" }
+      }
     },
     {
       "parameters": {

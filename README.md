@@ -19,7 +19,8 @@
 | `deploy/nginx-proxy-manager/` | NPM (портове 80, 443, 81) в мрежата `proxy` |
 | `deploy/portainer/` | Portainer CE на 9443 |
 | `deploy/server-setup.sh` | Фаза B: update, swap, Docker, мрежа `proxy`, SSH само с ключ |
-| `n8n/workflows/chat-echo.json` | Тестов workflow: webhook с Header Auth, връща `{ reply }` |
+| `n8n/` | n8n образ (`ai-exam-n8n`): при старт внася и публикува `n8n/workflows/*.json`. Виж `n8n/README.md` |
+| `n8n/workflows/chat-echo.json` | Webhook `chat` с Header Auth (credential `Bot secret`), връща `{ reply }` |
 
 ## Локално
 
@@ -78,7 +79,7 @@ NPM proxy host: домейн → `app`, порт `3000`, `http`, сертифи�
   ```
   После `http://localhost:5678`.
 - n8n пази данните си в схемата `n8n` с роля `n8n`. Ролята се създава от app при старт, затова n8n тръгва след като app е healthy.
-- Workflow-ите се внасят ръчно: Workflows → Import from file. В Webhook нода избери credential **Header Auth** с име `x-bot-secret` и стойност `BOT_SECRET`. Workflow-ът отговаря с JSON `{ "reply": "..." }`.
+- Workflow-ите идват от git: образът `ai-exam-n8n` ги внася и публикува при всеки старт. На сървъра създаваш само credential-ите, веднъж, с имената от workflow-ите (напр. **Header Auth** `Bot secret`: name `x-bot-secret`, value `BOT_SECRET`), и рестартираш n8n. Подробно: `n8n/README.md`.
 - Ако workflow трябва да чете таблици на сайта, дай права в нова миграция, напр. `GRANT SELECT ON contact_messages TO n8n;`.
 
 ## Капани (открити при локалния тест на стека)
