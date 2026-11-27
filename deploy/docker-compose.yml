@@ -10,7 +10,10 @@
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/teodoragardjeva/ai-exam}:${APP_TAG:-latest}
+    # Private GHCR image: Portainer pulls it with the "ghcr" registry (PAT with read:packages).
+    # "latest" moves with every merge to main and every stable release.
+    # For a fixed version use a release tag instead, e.g. :1.0 or :1.0.0.
+    image: ghcr.io/teodoragardjeva/ai-exam:latest
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-app}
