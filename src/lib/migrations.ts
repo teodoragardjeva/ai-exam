@@ -40,10 +40,13 @@ export const migrations: Migration[] = [
     `,
   },
   {
+    // Only pgvector, pinned to "public". We don't create "uuid-ossp": an extension lives in one
+    // schema per database, n8n creates it in its own schema "n8n", and our tables use the
+    // built-in gen_random_uuid() instead. (Edited after it ran on the server: on an existing
+    // database IF NOT EXISTS makes it a no-op either way.)
     id: "002_extensions",
     sql: `
-      CREATE EXTENSION IF NOT EXISTS vector;
-      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+      CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
     `,
   },
   {
@@ -133,7 +136,7 @@ export const migrations: Migration[] = [
     id: "005_kb_documents",
     sql: `
       CREATE TABLE kb_documents (
-        id        uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         text      text  NOT NULL,
         metadata  jsonb NOT NULL DEFAULT '{}'::jsonb,
         embedding vector(1536)

@@ -29,6 +29,13 @@ describe("migrations", () => {
     expect(tickets).toContain("'Returns & refunds'");
   });
 
+  it("don't depend on uuid-ossp (n8n owns it in its own schema)", () => {
+    for (const m of migrations) {
+      expect(m.sql).not.toContain("uuid_generate_v4(");
+      expect(m.sql).not.toContain("uuid-ossp");
+    }
+  });
+
   it("seed all eight orders from Appendix B", () => {
     const orders = migrations.find((m) => m.id === "003_orders")!.sql;
     for (let n = 10421; n <= 10428; n++) expect(orders).toContain(`'HT-${n}'`);
