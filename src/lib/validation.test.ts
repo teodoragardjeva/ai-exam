@@ -41,6 +41,12 @@ describe("parseStatusChange", () => {
   it("rejects an unknown status", () => {
     expect(parseStatusChange({ status: "Deleted" }).ok).toBe(false);
   });
+
+  it("doesn't let staff set statuses that mean an email was sent", () => {
+    expect(parseStatusChange({ status: "Approved & sent" }).ok).toBe(false);
+    expect(parseStatusChange({ status: "Auto-answered" }).ok).toBe(false);
+    expect(parseStatusChange({ status: "Manual review" }).ok).toBe(true);
+  });
 });
 
 describe("parseReply", () => {

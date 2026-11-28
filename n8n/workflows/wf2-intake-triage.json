@@ -29,7 +29,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT order_number, customer_name, customer_email, product,\n       to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, amount_eur::float8 AS amount_eur,\n       delivery_status, to_char(CURRENT_DATE, 'YYYY-MM-DD') AS today\nFROM orders\nWHERE order_number = upper(trim($1)) AND lower(customer_email) = lower(trim($2))",
+        "query": "SELECT order_number, customer_name, customer_email, product,\n       to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, amount_eur::float8 AS amount_eur,\n       delivery_status, to_char((now() AT TIME ZONE 'Europe/Sofia')::date, 'YYYY-MM-DD') AS today\nFROM orders\nWHERE order_number = upper(trim($1)) AND lower(customer_email) = lower(trim($2))",
         "options": {
           "queryReplacement": "={{ [ $json.body.order_number, $json.body.email ] }}"
         }
@@ -108,9 +108,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO tickets (order_number, customer_name, customer_email, message)\nVALUES ($1, $2, $3, $4)\nRETURNING ticket_number",
+        "query": "INSERT INTO tickets (order_number, customer_name, customer_email, message, n8n_execution_id)\nVALUES ($1, $2, $3, $4, $5)\nRETURNING ticket_number",
         "options": {
-          "queryReplacement": "={{ [ $json.order_number, $('Webhook').item.json.body.name, $('Webhook').item.json.body.email, $('Webhook').item.json.body.message ] }}"
+          "queryReplacement": "={{ [ $json.order_number, $('Webhook').item.json.body.name, $('Webhook').item.json.body.email, $('Webhook').item.json.body.message, $execution.id ] }}"
         }
       },
       "id": "00000000-0000-4000-8000-000000000023",
@@ -163,7 +163,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const patterns = [\n  [/ignore (all |any )?(the )?(previous|prior|above) (instructions|rules|prompts?)/i, \"ignore previous instructions\"],\n  [/игнорирай(те)? (всички )?(предишни|горни)/i, \"игнорирай предишните инструкции\"],\n  [/(disregard|forget) (all |your )?(previous |prior )?(instructions|rules)/i, \"disregard instructions\"],\n  [/(you are now|from now on you are|act as|pretend to be)\\b/i, \"role change\"],\n  [/(ти вече си|от сега нататък си|държи се като|представи се за)/i, \"смяна на ролята\"],\n  [/(system prompt|системн(ия|ият) промпт|developer mode|jailbreak|\\bDAN\\b)/i, \"system prompt / jailbreak\"],\n  [/(одобри|approve).{0,40}(връщане|refund).{0,40}(€|eur|лв|\\d)/i, \"instructs to approve a refund\"],\n];\nconst ctx = $input.first().json;\nconst hit = patterns.find(([re]) => re.test(ctx.message));\nreturn [{ json: { ...ctx, heuristic_injection: Boolean(hit), heuristic_reason: hit ? \"Heuristic: \" + hit[1] : \"\" } }];"
+        "jsCode": "const patterns = [\n  [/ignore (all |any )?(the )?(previous|prior|above) (instructions|rules|prompts?)/i, \"ignore previous instructions\"],\n  [/игнорирай(те)? (всички )?(предишни|горни)/i, \"игнорирай предишните инструкции\"],\n  [/(disregard|forget) (all |your )?(previous |prior )?(instructions|rules)/i, \"disregard instructions\"],\n  // \"act as\" only with a role, so \"can the plug act as a timer?\" is not flagged.\n  [/(you are now|from now on you are|pretend to be|act as (an? |the )?(ai|assistant|manager|admin|administrator|system|developer|refund))\\b/i, \"role change\"],\n  [/(ти вече си|от сега нататък си|държи се като|представи се за)/i, \"смяна на ролята\"],\n  [/(system prompt|системн(ия|ият) промпт|developer mode|jailbreak|\\bDAN\\b)/i, \"system prompt / jailbreak\"],\n  [/(одобри|approve).{0,40}(връщане|refund).{0,40}(€|eur|лв|\\d)/i, \"instructs to approve a refund\"],\n];\nconst ctx = $input.first().json;\nconst hit = patterns.find(([re]) => re.test(ctx.message));\nreturn [{ json: { ...ctx, heuristic_injection: Boolean(hit), heuristic_reason: hit ? \"Heuristic: \" + hit[1] : \"\" } }];"
       },
       "id": "00000000-0000-4000-8000-000000000026",
       "name": "Injection heuristics",
