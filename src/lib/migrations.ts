@@ -176,4 +176,9 @@ export const migrations: Migration[] = [
       CREATE INDEX n8n_chat_histories_session_idx ON n8n_chat_histories (session_id);
     `,
   },
+  {
+    // The scaffold's example contact form is replaced by tickets.
+    id: "008_drop_contact_messages",
+    sql: `DROP TABLE IF EXISTS contact_messages;`,
+  },
 ];

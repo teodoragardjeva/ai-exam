@@ -12,6 +12,9 @@ const SECRETS = [
   "N8N_READONLY_DB_PASSWORD",
   "N8N_ENCRYPTION_KEY",
   "BOT_SECRET",
+  "BETTER_AUTH_SECRET",
+  "STAFF_MANAGER_PASSWORD",
+  "STAFF_AGENT_PASSWORD",
 ];
 const target = ".env.local";
 const force = process.argv.includes("--force");

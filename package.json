@@ -20,6 +20,7 @@
     "dev:services:reset": "docker compose --env-file .env.local -f docker-compose.dev.yml down -v && docker compose --env-file .env.local -f docker-compose.dev.yml up -d"
   },
   "dependencies": {
+    "better-auth": "1.7.28",
     "next": "16.4.6",
     "pg": "^8.23.1",
     "react": "19.3.0",

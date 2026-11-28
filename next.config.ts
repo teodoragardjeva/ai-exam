@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Self-contained server in .next/standalone, used by the Docker image.
   output: "standalone",
-  cacheComponents: true,
-  partialPrefetching: true,
+  // No cacheComponents: every page here is per-request (staff login, live dashboard).
+  poweredByHeader: false,
   turbopack: {
     rules: {
       "*.css": {
