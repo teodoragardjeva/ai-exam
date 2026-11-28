@@ -67,6 +67,7 @@ Workflow-ите са в `n8n/workflows/*.json` и се генерират от �
 | **WF-3 Approval & reply** | Execute Workflow (от WF-2) | За „Чака одобрение“: Gmail **Send and Wait** с Custom Form (решение, редактиран отговор, коментар) до мениджъра → статус, финален отговор, обработено от → имейл до клиента. За автоматичните отговори (R2, R7) и R5: директно имейл до клиента. |
 | **WF-4 Send reply** | Webhook `POST /webhook/send-reply`, Header Auth | Служителят изпраща редактирания отговор от таблото → Gmail → „Одобрено и изпратено“ |
 | **WF-5 Manager assistant** | Webhook `POST /webhook/manager-assistant`, Header Auth | Чат за мениджъра: AI Agent + Postgres Chat Memory (по мениджър и разговор) + Postgres tool само за четене (роля `n8n_readonly`, read-only на ниво база, timeout 5 s) |
+| **WF-6 Daily report** | Schedule всеки ден в 08:00 (Europe/Sofia) + ръчно | Вчерашните запитвания → статистика по статус, отдел, спешност и връщания (смятана в код, не от AI) → Summarization Chain (обобщение на български) → Gmail до мениджъра |
 | **WF-E Errors** | Error Trigger (избран във всички WF) | Записва в `error_log` (workflow, нод, съобщение, URL на изпълнението, време) и праща имейл на мениджъра |
 
 - **Retry On Fail** (3 опита) на AI, Postgres и Gmail нодовете.
@@ -217,7 +218,7 @@ sudo docker exec -e N8N_RUNNERS_BROKER_PORT=5690 ai-exam-stack-n8n-1 n8n execute
 - Откриването на injection е евристики + AI класификатор: може да пропусне нов тип атака; правилата пак не дават автоматични обещания.
 - Настроението зависи от модела (`gpt-5-mini`); праговете са проверени само на сценариите от заданието.
 - Droplet-ът не е създаден с cloud-init (hardening-ът е направен на място).
-- Още не са направени: снимка към запитването, дневен отчет, reranking.
+- Още не са направени: снимка към запитването, reranking.
 
 ## Code review и security review
 
