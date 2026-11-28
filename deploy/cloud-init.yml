@@ -1,0 +1,56 @@
+#cloud-config
+# For a NEW DigitalOcean droplet (Create Droplet → Advanced options → Add initialization scripts).
+# Ubuntu 24.04 LTS, EU region (e.g. Frankfurt). Replace the SSH key below with your public key
+# (the content of id_ed25519.pub). Public keys are not secrets.
+#
+# Result: user "deploy" with SSH key only, no root or password login, automatic security
+# updates, 2 GB swap, Docker Engine + Compose, and the "proxy" network for Nginx Proxy Manager.
+# The current exam droplet was hardened in place with deploy/harden.sh instead.
+
+users:
+  - name: deploy
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA...REPLACE_WITH_YOUR_PUBLIC_KEY deploy
+
+disable_root: true
+ssh_pwauth: false
+
+package_update: true
+package_upgrade: true
+packages:
+  - unattended-upgrades
+  - ca-certificates
+  - curl
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  - path: /etc/sysctl.d/99-swappiness.conf
+    content: |
+      vm.swappiness=10
+
+runcmd:
+  - fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - sysctl -p /etc/sysctl.d/99-swappiness.conf
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - bash -c '. /etc/os-release && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" > /etc/apt/sources.list.d/docker.list'
+  - apt-get update -y
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker deploy
+  - systemctl enable --now docker unattended-upgrades
+  - docker network create proxy
+  - systemctl restart ssh

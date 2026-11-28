@@ -10,7 +10,7 @@ export async function register() {
   }
 
   const { getPool } = await import("@/lib/db");
-  const { runMigrations, ensureN8nRole } = await import("@/lib/migrate");
+  const { runMigrations, ensureN8nRole, ensureWorkflowRoles, ensureDemoOrders } = await import("@/lib/migrate");
   const { migrations } = await import("@/lib/migrations");
 
   const pool = getPool();
@@ -23,5 +23,17 @@ export async function register() {
   if (n8nPassword) {
     await ensureN8nRole(pool, n8nPassword);
     console.log("[startup] n8n database role ready");
+  }
+
+  const roles = await ensureWorkflowRoles(pool, {
+    app: process.env.N8N_APP_DB_PASSWORD,
+    readonly: process.env.N8N_READONLY_DB_PASSWORD,
+  });
+  console.log(`[startup] workflow roles ready: ${roles.join(", ") || "none (passwords not set)"}`);
+
+  const demoEmail = process.env.DEMO_ORDER_EMAIL;
+  if (demoEmail) {
+    await ensureDemoOrders(pool, demoEmail, process.env.DEMO_ORDER_NAME || "Тест Клиент");
+    console.log("[startup] demo orders HT-10501, HT-10502 ready");
   }
 }

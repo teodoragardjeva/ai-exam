@@ -9,7 +9,8 @@ name: ai-exam-dev
 
 services:
   db:
-    image: postgres:17-alpine
+    # Same as the server: Postgres 17 with pgvector.
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
