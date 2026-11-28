@@ -47,6 +47,17 @@ export const GRANTS: { role: string; sql: string[] }[] = [
   {
     role: N8N_APP_ROLE,
     sql: [
+      // n8n's Postgres Chat Memory runs CREATE TABLE IF NOT EXISTS on every call, which needs
+      // CREATE on the first schema in search_path even when the table exists. So n8n_app gets
+      // its own schema "n8n_app" (first in its default search_path "$user", public) holding the
+      // chat memory, instead of CREATE rights on public.
+      "CREATE SCHEMA IF NOT EXISTS n8n_app AUTHORIZATION n8n_app",
+      `DO $$ BEGIN
+         IF to_regclass('public.n8n_chat_histories') IS NOT NULL
+            AND to_regclass('n8n_app.n8n_chat_histories') IS NULL THEN
+           ALTER TABLE public.n8n_chat_histories SET SCHEMA n8n_app;
+         END IF;
+       END $$`,
       "GRANT USAGE ON SCHEMA public TO n8n_app",
       "GRANT SELECT ON orders TO n8n_app",
       "GRANT SELECT, INSERT, UPDATE ON tickets TO n8n_app",
@@ -54,8 +65,8 @@ export const GRANTS: { role: string; sql: string[] }[] = [
       "GRANT SELECT, INSERT, UPDATE, DELETE ON kb_documents TO n8n_app",
       "GRANT INSERT ON security_log, error_log TO n8n_app",
       "GRANT USAGE ON SEQUENCE security_log_id_seq, error_log_id_seq TO n8n_app",
-      "GRANT SELECT, INSERT, DELETE ON n8n_chat_histories TO n8n_app",
-      "GRANT USAGE, SELECT ON SEQUENCE n8n_chat_histories_id_seq TO n8n_app",
+      "GRANT SELECT, INSERT, DELETE ON n8n_app.n8n_chat_histories TO n8n_app",
+      "GRANT USAGE, SELECT ON SEQUENCE n8n_app.n8n_chat_histories_id_seq TO n8n_app",
       "GRANT SELECT ON app_settings TO n8n_app",
     ],
   },
@@ -64,6 +75,9 @@ export const GRANTS: { role: string; sql: string[] }[] = [
     sql: [
       "GRANT USAGE ON SCHEMA public TO n8n_readonly",
       "GRANT SELECT ON tickets, orders TO n8n_readonly",
+      // The manager assistant writes its own SQL: read-only at the database level, short timeout.
+      "ALTER ROLE n8n_readonly SET default_transaction_read_only = on",
+      "ALTER ROLE n8n_readonly SET statement_timeout = '5s'",
     ],
   },
 ];
