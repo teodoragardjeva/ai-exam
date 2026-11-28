@@ -84,20 +84,23 @@ export function TicketForm() {
 
   if (status.kind === "sent") {
     return (
-      <div role="status" className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-50">
-        <p className="text-lg font-semibold">Получихме запитването ви.</p>
+      <div role="status" className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-950">
+        <p className="flex items-center gap-2 text-lg font-semibold">
+          <span aria-hidden className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">✓</span>
+          Получихме запитването ви.
+        </p>
         <p>
-          Номер на запитването: <strong className="font-mono text-xl">{status.ticketNumber}</strong>
+          Номер на запитването: <strong className="rounded-lg bg-white px-2 py-0.5 font-mono text-xl text-brand-navy ring-1 ring-emerald-200">{status.ticketNumber}</strong>
         </p>
         <p>Ще получите отговор по имейл до 1 работен ден (поддръжката работи пн–пт, 09:00–18:00).</p>
         <p className="text-sm">
           Запазете номера: с него и имейла си можете да{" "}
-          <a href="/track" className="underline">
+          <a href="/track" className="font-medium text-brand-blue underline">
             проследите запитването
           </a>
           .
         </p>
-        <button type="button" onClick={() => setStatus({ kind: "idle" })} className="self-start text-sm underline">
+        <button type="button" onClick={() => setStatus({ kind: "idle" })} className="self-start rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-100">
           Ново запитване
         </button>
       </div>
@@ -107,26 +110,30 @@ export function TicketForm() {
   const waitingForCaptcha = Boolean(SITE_KEY) && !token;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex w-full flex-col gap-4">
+    <form onSubmit={onSubmit} noValidate className="grid w-full gap-4 sm:grid-cols-2">
       <Input name="name" label="Име" autoComplete="name" error={errors.name} />
       <Input name="email" label="Имейл" type="email" autoComplete="email" inputMode="email" error={errors.email} />
-      <Input name="orderNumber" label="Номер на поръчка" placeholder="HT-10421" autoCapitalize="characters" error={errors.orderNumber} />
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Съобщение</span>
+      <Input name="orderNumber" label="Номер на поръчка" placeholder="HT-10421" autoCapitalize="characters" error={errors.orderNumber} hint="Ще го намерите в имейла за поръчката." />
+      <label className="flex flex-col gap-1.5 sm:col-span-2">
+        <span className="text-sm font-medium text-brand-navy">Съобщение</span>
         <textarea
           name="message"
           rows={5}
           maxLength={4000}
           aria-invalid={Boolean(errors.message)}
-          className={`rounded-xl border px-3 py-3 text-base ${errors.message ? "border-red-500" : "border-zinc-300 dark:border-zinc-700"} bg-white dark:bg-zinc-900`}
+          className="field h-auto resize-y py-3"
         />
         {errors.message && <span className="text-sm text-red-600">{errors.message}</span>}
       </label>
 
-      {SITE_KEY && <Turnstile siteKey={SITE_KEY} onToken={setToken} resetSignal={resetSignal} />}
+      {SITE_KEY && (
+        <div className="sm:col-span-2">
+          <Turnstile siteKey={SITE_KEY} onToken={setToken} resetSignal={resetSignal} />
+        </div>
+      )}
 
       {status.kind === "error" && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800 dark:bg-red-950 dark:text-red-100">
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">
           {status.message}
         </p>
       )}
@@ -134,7 +141,7 @@ export function TicketForm() {
       <button
         type="submit"
         disabled={status.kind === "sending" || waitingForCaptcha}
-        className="h-12 rounded-xl bg-blue-600 px-4 text-base font-semibold text-white disabled:opacity-50"
+        className="btn-primary mt-2 sm:col-span-2"
       >
         {status.kind === "sending" ? "Изпращане…" : "Изпрати запитването"}
       </button>
@@ -146,18 +153,23 @@ function Input({
   name,
   label,
   error,
+  hint,
   ...rest
-}: { name: Field; label: string; error?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+}: { name: Field; label: string; error?: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-brand-navy">{label}</span>
       <input
         name={name}
         aria-invalid={Boolean(error)}
-        className={`h-12 rounded-xl border px-3 text-base ${error ? "border-red-500" : "border-zinc-300 dark:border-zinc-700"} bg-white dark:bg-zinc-900`}
+        className="field"
         {...rest}
       />
-      {error?.trim() && <span className="text-sm text-red-600">{error}</span>}
+      {error?.trim() ? (
+        <span className="text-sm text-red-600">{error}</span>
+      ) : (
+        hint && <span className="text-xs text-slate-500">{hint}</span>
+      )}
     </label>
   );
 }

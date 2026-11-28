@@ -30,15 +30,15 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Имейл</span>
-        <input name="email" type="email" required autoComplete="username" className="h-12 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-900" />
+        <span className="text-sm font-medium text-brand-navy">Имейл</span>
+        <input name="email" type="email" required autoComplete="username" className="field" />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Парола</span>
-        <input name="password" type="password" required autoComplete="current-password" className="h-12 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-900" />
+        <span className="text-sm font-medium text-brand-navy">Парола</span>
+        <input name="password" type="password" required autoComplete="current-password" className="field" />
       </label>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={pending} className="h-12 rounded-xl bg-blue-600 font-semibold text-white disabled:opacity-50">
+      <button type="submit" disabled={pending} className="btn-primary">
         {pending ? "Влизане…" : "Вход"}
       </button>
     </form>

@@ -31,41 +31,41 @@ export function TrackForm() {
   return (
     <div className="flex flex-col gap-6">
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Номер на запитване</span>
-          <input name="ticketNumber" required placeholder="T-001234" autoCapitalize="characters" className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base dark:border-zinc-700 dark:bg-zinc-900" />
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-brand-navy">Номер на запитване</span>
+          <input name="ticketNumber" required placeholder="T-001234" autoCapitalize="characters" className="field" />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Имейл, от който сте писали</span>
-          <input name="email" type="email" required autoComplete="email" inputMode="email" className="h-12 rounded-xl border border-zinc-300 bg-white px-3 text-base dark:border-zinc-700 dark:bg-zinc-900" />
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-brand-navy">Имейл, от който сте писали</span>
+          <input name="email" type="email" required autoComplete="email" inputMode="email" className="field" />
         </label>
-        <button type="submit" disabled={state.kind === "loading"} className="h-12 rounded-xl bg-blue-600 font-semibold text-white disabled:opacity-50">
+        <button type="submit" disabled={state.kind === "loading"} className="btn-primary mt-2">
           {state.kind === "loading" ? "Търсене…" : "Провери статуса"}
         </button>
       </form>
 
       {state.kind === "error" && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800 dark:bg-red-950 dark:text-red-100">
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {state.message}
         </p>
       )}
 
       {state.kind === "found" && (
-        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
+        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/5 p-5">
           <p>
             <span className="font-mono font-semibold">{state.ticket.ticketNumber}</span> ·{" "}
             {new Date(state.ticket.createdAt).toLocaleString("bg-BG", { timeZone: "Europe/Sofia", dateStyle: "short", timeStyle: "short" })}
           </p>
           <p>
-            Статус: <strong>{state.ticket.statusLabel}</strong>
+            Статус: <strong className="rounded-full bg-brand-blue px-2.5 py-0.5 text-sm text-white">{state.ticket.statusLabel}</strong>
           </p>
           {state.ticket.reply ? (
             <div>
-              <p className="mb-1 text-sm text-zinc-500">Нашият отговор:</p>
-              <p className="whitespace-pre-wrap rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900">{state.ticket.reply}</p>
+              <p className="mb-1 text-sm text-slate-500">Нашият отговор:</p>
+              <p className="whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3">{state.ticket.reply}</p>
             </div>
           ) : (
-            <p className="text-zinc-600 dark:text-zinc-400">Още работим по запитването. Ще получите отговор по имейл.</p>
+            <p className="text-slate-600">Още работим по запитването. Ще получите отговор по имейл.</p>
           )}
         </section>
       )}
