@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { statusLabel } from "@/lib/labels";
 import { TICKET_STATUSES } from "@/lib/migrations";
 
 export function StatusForm({ ticketNumber, current }: { ticketNumber: string; current: string }) {
@@ -32,7 +33,7 @@ export function StatusForm({ ticketNumber, current }: { ticketNumber: string; cu
       <select name="status" defaultValue={current} className="h-10 rounded-lg border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-900">
         {TICKET_STATUSES.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {statusLabel(s)}
           </option>
         ))}
       </select>

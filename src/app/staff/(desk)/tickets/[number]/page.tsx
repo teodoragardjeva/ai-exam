@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge, UrgencyBadge } from "@/components/staff/Badges";
 import { StatusForm } from "@/components/staff/StatusForm";
+import { departmentLabel, languageLabel, sentimentLabel } from "@/lib/labels";
 import { requireStaffPage } from "@/lib/staff";
 import { getTicket } from "@/lib/tickets";
 
@@ -65,9 +66,9 @@ export default async function TicketPage({ params }: PageProps<"/staff/tickets/[
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <Row label="Клиент" value={`${ticket.customer_name} · ${ticket.customer_email}`} />
               <Row label="Поръчка" value={ticket.order_number} />
-              <Row label="Отдел" value={ticket.department} />
-              <Row label="Език" value={ticket.language} />
-              <Row label="Настроение" value={ticket.sentiment && `${ticket.sentiment} (сила ${score(ticket.sentiment_score)}, увереност ${score(ticket.sentiment_confidence)})`} />
+              <Row label="Отдел" value={departmentLabel(ticket.department)} />
+              <Row label="Език" value={languageLabel(ticket.language)} />
+              <Row label="Настроение" value={ticket.sentiment && `${sentimentLabel(ticket.sentiment)} (сила ${score(ticket.sentiment_score)}, увереност ${score(ticket.sentiment_confidence)})`} />
               <Row label="В наръчника" value={ticket.answer_found_in_kb == null ? null : ticket.answer_found_in_kb ? "да" : "не"} />
               <Row label="Връщане на пари" value={ticket.refund_requested ? `да${ticket.refund_amount ? `, €${ticket.refund_amount}` : ""}` : "не"} />
               <Row label="Обработено от" value={ticket.handled_by} />
