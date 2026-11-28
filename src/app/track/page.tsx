@@ -14,7 +14,7 @@ export default function TrackPage() {
       <TrackForm />
       <p className="mt-6 border-t border-slate-100 pt-4 text-sm text-slate-500">
         Нямате номер?{" "}
-        <Link href="/" className="font-medium text-brand-blue hover:underline">
+        <Link href="/" className="font-medium text-accent-dark hover:underline">
           Изпратете ново запитване
         </Link>
       </p>

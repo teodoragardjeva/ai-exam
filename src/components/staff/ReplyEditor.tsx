@@ -34,7 +34,7 @@ export function ReplyEditor({ ticketNumber, initial, customerEmail }: { ticketNu
           type="button"
           onClick={send}
           disabled={state === "sending" || text.trim().length < 5}
-          className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          className="h-10 rounded-lg bg-accent hover:bg-accent-dark px-4 text-sm font-semibold text-white disabled:opacity-50"
         >
           {state === "sending" ? "Изпращане…" : "Изпрати на клиента"}
         </button>

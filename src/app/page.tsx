@@ -17,7 +17,7 @@ export default function Home() {
             Получавате и номер, с който да следите запитването.
           </InfoCard>
           <InfoCard icon={<SearchIcon />} title="Вече сте писали?">
-            <Link href="/track" className="font-medium text-brand-blue hover:underline">
+            <Link href="/track" className="font-medium text-accent-dark hover:underline">
               Проследете запитването си →
             </Link>
           </InfoCard>

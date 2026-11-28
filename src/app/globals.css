@@ -5,8 +5,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f5f8fc;
-  --foreground: #0b1f4d;
+  --background: #f2f8f7;
+  --foreground: #0f2e3a;
 }
 
 @theme inline {
@@ -15,8 +15,11 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* HomeTech brand, taken from the logo */
-  --color-brand-navy: #0b1f4d;
+  /* HomeTech brand: logo blues + a teal/mint accent */
+  --color-brand-navy: #0f2e3a;
+  --color-accent: #0d9488;
+  --color-accent-dark: #0f766e;
+  --color-mint: #5eead4;
   --color-brand-blue: #0a56d6;
   --color-brand-sky: #2f8cf0;
   --color-brand-cyan: #18c3dc;
@@ -31,12 +34,12 @@ body {
 /* Shared form controls (public forms + staff) */
 @layer components {
   .field {
-    @apply h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-base text-brand-navy shadow-sm transition outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/15;
+    @apply h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-base text-brand-navy shadow-sm transition outline-none placeholder:text-slate-400 focus:border-accent focus:ring-4 focus:ring-accent/15;
   }
   .field[aria-invalid="true"] {
     @apply border-red-500 focus:border-red-500 focus:ring-red-500/15;
   }
   .btn-primary {
-    @apply inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-brand-blue to-brand-sky px-5 text-base font-semibold text-white shadow-md shadow-brand-blue/25 transition hover:brightness-110 focus-visible:ring-4 focus-visible:ring-brand-blue/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100;
+    @apply inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-accent to-brand-cyan px-5 text-base font-semibold text-white shadow-md shadow-accent/25 transition hover:brightness-110 focus-visible:ring-4 focus-visible:ring-accent/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100;
   }
 }
