@@ -13,11 +13,13 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:n8n": "node scripts/check-n8n-workflows.mjs",
+    "check:n8n": "node scripts/check-n8n-workflows.mjs && node n8n/src/build.mjs --check",
     "dev:env": "node scripts/dev-env.mjs",
     "dev:services": "docker compose --env-file .env.local -f docker-compose.dev.yml up -d",
     "dev:services:stop": "docker compose --env-file .env.local -f docker-compose.dev.yml down",
-    "dev:services:reset": "docker compose --env-file .env.local -f docker-compose.dev.yml down -v && docker compose --env-file .env.local -f docker-compose.dev.yml up -d"
+    "dev:services:reset": "docker compose --env-file .env.local -f docker-compose.dev.yml down -v && docker compose --env-file .env.local -f docker-compose.dev.yml up -d",
+    "n8n:build": "node n8n/src/build.mjs",
+    "scenarios": "node scripts/scenarios.mjs"
   },
   "dependencies": {
     "better-auth": "1.7.28",

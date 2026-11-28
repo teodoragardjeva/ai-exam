@@ -90,6 +90,9 @@ jobs:
       - name: Every workflow has a unique top-level id
         run: node scripts/check-n8n-workflows.mjs
 
+      - name: Workflow JSON matches n8n/src (npm run n8n:build)
+        run: node n8n/src/build.mjs --check
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR

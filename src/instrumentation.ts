@@ -10,7 +10,7 @@ export async function register() {
   }
 
   const { getPool } = await import("@/lib/db");
-  const { runMigrations, ensureN8nRole, ensureWorkflowRoles, ensureDemoOrders } = await import("@/lib/migrate");
+  const { runMigrations, ensureN8nRole, ensureWorkflowRoles, ensureDemoOrders, upsertSettings } = await import("@/lib/migrate");
   const { migrations } = await import("@/lib/migrations");
 
   const pool = getPool();
@@ -30,6 +30,9 @@ export async function register() {
     readonly: process.env.N8N_READONLY_DB_PASSWORD,
   });
   console.log(`[startup] workflow roles ready: ${roles.join(", ") || "none (passwords not set)"}`);
+
+  // n8n sends approval requests, error alerts and the daily report to this address.
+  await upsertSettings(pool, { manager_email: process.env.STAFF_MANAGER_EMAIL });
 
   const demoEmail = process.env.DEMO_ORDER_EMAIL;
   if (demoEmail) {

@@ -1,0 +1,224 @@
+{
+  "id": "hometechKbLoad01",
+  "name": "WF-1 KB load (handbook → kb_documents)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM kb_documents WHERE metadata->>'source' = 'hometech-handbook'",
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "Delete old handbook chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Appendix A, one item per section / FAQ (n8n/src/handbook.cjs). Re-running is safe:\n// the previous step deletes this source first, so there are no duplicates.\nconst sections = [\n  {\n    \"section\": \"1. Работно време и контакти\",\n    \"text\": \"Поддръжката работи от понеделник до петък, 09:00–18:00. На запитвания, получени извън работно време, се отговаря в следващия работен ден. Целево време за първи отговор: 1 работен ден; за спешни случаи: 4 работни часа. Телефон: +359 2 000 0000 (измислен). Имейл: support@hometech.example.\"\n  },\n  {\n    \"section\": \"2. Доставка\",\n    \"text\": \"Поръчките се изпращат до 1 работен ден. Доставката в България отнема 1–2 работни дни, в други държави от ЕС – 3–6 работни дни. Всяка поръчка получава номер за проследяване по имейл при изпращането. Ако пратката не е мърдала 5 работни дни, клиентът трябва да се свърже с поддръжката с номера на поръчката; тогава отваряме проверка с куриера, която отнема до 7 работни дни. Доставката е безплатна за поръчки над €50; иначе струва €4.90.\"\n  },\n  {\n    \"section\": \"3. Връщане на стока и пари\",\n    \"text\": \"Клиентът може да върне всеки продукт до 30 дни от датата на покупка без да посочва причина, ако продуктът е комплектен и неповреден. За да започне връщане, клиентът отговаря на имейла от поддръжката с номера на поръчката; ние изпращаме предплатен етикет за връщане. Парите се възстановяват по оригиналния начин на плащане в рамките на 5–7 работни дни след като върнатият продукт пристигне в склада ни. Таксата за доставка не се възстановява, освен ако продуктът е бил дефектен.\"\n  },\n  {\n    \"section\": \"4. Гаранция\",\n    \"text\": \"Всички продукти имат 24-месечна гаранция от датата на покупка. Гаранцията покрива производствени дефекти. Тя не покрива физически повреди (изпускане, пукнатини), повреди от вода или от отваряне на устройството. Гаранционните случаи се проверяват от сервизния ни екип до 10 работни дни; продуктът се ремонтира или заменя. След изтичане на гаранцията предлагаме платен ремонт: таксата за диагностика е €15 и се приспада от цената на ремонта, ако клиентът го приеме.\"\n  },\n  {\n    \"section\": \"5. Фактури\",\n    \"text\": \"Фактура се изпраща автоматично по имейл с всяка поръчка. За фирмена фактура при поръчката се въвеждат име на фирмата и ДДС номер; фактурите не могат да се променят по-късно от 5 дни след датата на покупка. Клиентът може да поиска копие на фактура от поддръжката по всяко време.\"\n  },\n  {\n    \"section\": \"6. ЧЗВ: HT Thermo 2 показва „No Wi-Fi“\",\n    \"text\": \"HT Thermo 2 (смарт термостат) показва „No Wi-Fi“: термостатът работи само с Wi-Fi мрежи на 2.4 GHz. Проверете дали рутерът излъчва мрежа на 2.4 GHz, след това задръжте бутона за меню 10 секунди, за да рестартирате настройката на Wi-Fi.\"\n  },\n  {\n    \"section\": \"6. ЧЗВ: HT Cam Outdoor е offline\",\n    \"text\": \"HT Cam Outdoor е offline в приложението: проверете захранващия адаптер, след това приближете рутера или добавете Wi-Fi усилвател; камерата има нужда от сигнал поне 2 чертички. Ако остане offline, натиснете бутона за reset за 15 секунди и добавете камерата отново в приложението.\"\n  },\n  {\n    \"section\": \"6. ЧЗВ: HT Plug Mini не се сдвоява\",\n    \"text\": \"HT Plug Mini не се сдвоява: контактът трябва да е в режим на сдвояване (светодиодът мига бързо). Задръжте бутона 6 секунди, докато светодиодът започне да мига бързо, и добавете устройството в приложението до 3 минути.\"\n  },\n  {\n    \"section\": \"6. ЧЗВ: Фърмуер на HT Hub\",\n    \"text\": \"Фърмуер на HT Hub: обновленията се инсталират автоматично през нощта между 02:00 и 04:00. По време на обновление устройствата може да са недостъпни до 5 минути.\"\n  },\n  {\n    \"section\": \"7. Тон на комуникация\",\n    \"text\": \"Отговорите са приятелски, кратки (до 150 думи) и на езика на клиента. Обръщаме се към клиента с малкото му име. Никога не обещаваме нещо, което го няма в този наръчник (напр. отстъпки, по-бърза доставка или изключения от срока за връщане). Подпис: „Екипът по поддръжка на HomeTech“.\"\n  }\n];\nreturn sections.map((s) => ({ json: s }));"
+      },
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "Handbook sections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "kb_documents",
+        "embeddingBatchSize": 50,
+        "options": {
+          "skipInitializationCheck": true
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000004",
+      "name": "Save to kb_documents",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.4,
+      "position": [
+        700,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000005",
+      "name": "OpenAI embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        220
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiCredent001",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.section }}\n{{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source",
+                "value": "hometech-handbook"
+              },
+              {
+                "name": "section",
+                "value": "={{ $json.section }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000006",
+      "name": "Handbook loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 800,
+        "chunkOverlap": 100,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000007",
+      "name": "Text splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Delete old handbook chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete old handbook chunks": {
+      "main": [
+        [
+          {
+            "node": "Handbook sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handbook sections": {
+      "main": [
+        [
+          {
+            "node": "Save to kb_documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Save to kb_documents",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handbook loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Save to kb_documents",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Handbook loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "hometechErrors01"
+  },
+  "pinData": {}
+}

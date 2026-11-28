@@ -184,4 +184,16 @@ export const migrations: Migration[] = [
     id: "008_drop_contact_messages",
     sql: `DROP TABLE IF EXISTS contact_messages;`,
   },
+  {
+    // Settings n8n reads from the database (e.g. manager_email for approval emails),
+    // so n8n never needs access to environment variables. Written by the app on start.
+    id: "009_app_settings",
+    sql: `
+      CREATE TABLE app_settings (
+        key        text PRIMARY KEY,
+        value      text NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    `,
+  },
 ];

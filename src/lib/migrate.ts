@@ -56,6 +56,7 @@ export const GRANTS: { role: string; sql: string[] }[] = [
       "GRANT USAGE ON SEQUENCE security_log_id_seq, error_log_id_seq TO n8n_app",
       "GRANT SELECT, INSERT, DELETE ON n8n_chat_histories TO n8n_app",
       "GRANT USAGE, SELECT ON SEQUENCE n8n_chat_histories_id_seq TO n8n_app",
+      "GRANT SELECT ON app_settings TO n8n_app",
     ],
   },
   {
@@ -103,6 +104,21 @@ export async function ensureWorkflowRoles(
     client.release();
   }
   return ready;
+}
+
+// Key/value settings for n8n (see migration 009). Empty values are removed.
+export async function upsertSettings(pool: Pool, settings: Record<string, string | undefined>): Promise<void> {
+  for (const [key, value] of Object.entries(settings)) {
+    if (value) {
+      await pool.query(
+        `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [key, value],
+      );
+    } else {
+      await pool.query("DELETE FROM app_settings WHERE key = $1", [key]);
+    }
+  }
 }
 
 // Two extra demo orders with your own email, so reply emails reach you (Appendix B asks for this).
