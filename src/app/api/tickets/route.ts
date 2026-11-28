@@ -11,7 +11,9 @@ type IntakeResponse =
 
 export async function POST(request: Request) {
   const ip = clientIp(request.headers) ?? "unknown";
-  const limited = rateLimit(`tickets:${ip}`, 5, 10 * 60_000);
+  // 5 tickets per 10 minutes per IP by default; TICKETS_RATE_LIMIT overrides it (e.g. for test runs).
+  const max = Number(process.env.TICKETS_RATE_LIMIT) || 5;
+  const limited = rateLimit(`tickets:${ip}`, max, 10 * 60_000);
   if (!limited.ok) return tooManyRequests(limited);
 
   const body = await request.json().catch(() => null);

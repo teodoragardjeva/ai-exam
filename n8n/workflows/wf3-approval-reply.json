@@ -1,0 +1,445 @@
+{
+  "id": "hometechApprov01",
+  "name": "WF-3 Approval & reply (Gmail)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "00000000-0000-4000-8000-000000000050",
+      "name": "From WF-2",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'",
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000051",
+      "name": "Manager email",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $('From WF-2').first().json;\nconst manager = $input.first().json.manager_email || null;\nreturn [{ json: { ...t, manager_email: manager } }];"
+      },
+      "id": "00000000-0000-4000-8000-000000000052",
+      "name": "Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000053",
+              "leftValue": "={{ $json.needs_approval }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000054",
+      "name": "Needs approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.manager_email }}",
+        "subject": "=Одобрение: {{ $json.ticket_number }} ({{ $json.policy_rule }})",
+        "message": "=Запитване {{ $json.ticket_number }} чака одобрение.\n\nКлиент: {{ $json.name }} <{{ $json.email }}>\nПоръчка: {{ $json.order_number }} · {{ $json.product }} · €{{ $json.amount_eur }}\nПравило: {{ $json.policy_rule }}: {{ $json.status_reason }}\nРезюме: {{ $json.summary }}\n\nAI чернова на отговор:\n{{ $json.draft_reply }}",
+        "operation": "sendAndWait",
+        "responseType": "customForm",
+        "defineForm": "fields",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Решение",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Одобри и изпрати"
+                  },
+                  {
+                    "option": "Откажи"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Отговор към клиента",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.draft_reply }}"
+            },
+            {
+              "fieldLabel": "Коментар",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 3,
+              "resumeUnit": "days"
+            }
+          }
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000055",
+      "name": "Ask manager (Send and Wait)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        -120
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmailAccountCrd1",
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "6a9b2d3f-8c4e-4f70-ab2c-3d4e5f6a7b82",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $('Ticket').first().json;\nconst data = $input.first().json.data || $input.first().json;\nconst pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];\nconst decision = String(pick(\"Решение\") ?? \"\");\nconst edited = String(pick(\"Отговор към клиента\") ?? \"\").trim();\nconst comment = String(pick(\"Коментар\") ?? \"\").trim();\nconst approved = decision.startsWith(\"Одобри\");\nreturn [{ json: { ...t,\n  approved,\n  final_status: approved ? \"Approved & sent\" : \"Rejected\",\n  final_reply: approved ? (edited || t.draft_reply) : null,\n  handled_by: (t.manager_email || \"manager\") + \" (Gmail)\",\n  reason: comment ? \"Мениджър: \" + comment : (approved ? \"Одобрено от мениджъра\" : \"Отказано от мениджъра\"),\n} }];"
+      },
+      "id": "00000000-0000-4000-8000-000000000056",
+      "name": "Approval result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000057",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000058",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $input.first().json;\nreturn [{ json: { ...t, final_status: t.status, final_reply: t.draft_reply, handled_by: \"AI (автоматично)\", reason: null } }];"
+      },
+      "id": "00000000-0000-4000-8000-000000000059",
+      "name": "Auto reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Both paths (approved by the manager, or answered automatically) meet here.\nreturn $input.all().map((i) => ({ json: i.json }));"
+      },
+      "id": "00000000-0000-4000-8000-000000000060",
+      "name": "Final reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=HomeTech поддръжка: {{ $json.ticket_number }}",
+        "emailType": "text",
+        "message": "={{ $json.final_reply }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000061",
+      "name": "Email customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmailAccountCrd1",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET status = $2, final_reply = $3, handled_by = $4, status_reason = coalesce($5, status_reason)\nWHERE ticket_number = $1",
+        "options": {
+          "queryReplacement": "={{ [ $('Final reply').item.json.ticket_number, $('Final reply').item.json.final_status, $('Final reply').item.json.final_reply, $('Final reply').item.json.handled_by, $('Final reply').item.json.reason ] }}"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000062",
+      "name": "Save final reply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET status = 'Rejected', handled_by = $2, status_reason = $3 WHERE ticket_number = $1",
+        "options": {
+          "queryReplacement": "={{ [ $json.ticket_number, $json.handled_by, $json.reason ] }}"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000063",
+      "name": "Save rejection",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        -260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "From WF-2": {
+      "main": [
+        [
+          {
+            "node": "Manager email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manager email": {
+      "main": [
+        [
+          {
+            "node": "Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket": {
+      "main": [
+        [
+          {
+            "node": "Needs approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs approval?": {
+      "main": [
+        [
+          {
+            "node": "Ask manager (Send and Wait)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask manager (Send and Wait)": {
+      "main": [
+        [
+          {
+            "node": "Approval result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval result": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Final reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto reply": {
+      "main": [
+        [
+          {
+            "node": "Final reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final reply": {
+      "main": [
+        [
+          {
+            "node": "Email customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email customer": {
+      "main": [
+        [
+          {
+            "node": "Save final reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "hometechErrors01"
+  },
+  "pinData": {}
+}

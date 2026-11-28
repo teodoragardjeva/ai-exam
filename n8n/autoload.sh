@@ -29,9 +29,27 @@ if [ "${N8N_AUTOLOAD_WORKFLOWS:-true}" = "true" ] && ls "$SRC"/*.json >/dev/null
   if [ -n "$ids" ]; then
     echo "[autoload] importing:$ids"
     if n8n import:workflow --separate --input="$WORK"; then
-      for id in $ids; do
-        # Fails until the workflow's credentials exist; n8n still starts.
-        n8n publish:workflow --id="$id" || echo "[autoload] could not publish $id: create its credentials, then restart n8n"
+      # Two passes: a workflow that calls a sub-workflow (WF-2 → WF-3) can only be published
+      # after the sub-workflow, whatever the file order. Manual-only workflows (WF-1) are
+      # skipped. Missing credentials still leave n8n running; n8n's reason is printed.
+      pending="$ids"
+      for pass in 1 2; do
+        failed=""
+        for id in $pending; do
+          if out=$(n8n publish:workflow --id="$id" 2>&1); then
+            echo "[autoload] published $id"
+          elif printf '%s' "$out" | grep -q "has no trigger node"; then
+            echo "[autoload] $id has only a manual trigger: run it by hand, nothing to publish"
+          else
+            failed="$failed $id"
+            [ "$pass" = 2 ] && {
+              echo "[autoload] could not publish $id:"
+              printf '%s\n' "$out" | grep -vE 'license SDK|migration lock|^\s*$' | tail -2 | sed 's/^/[autoload]   /'
+            }
+          fi
+        done
+        [ -z "$failed" ] && break
+        pending="$failed"
       done
     else
       echo "[autoload] import failed, starting n8n with the workflows it already has"
