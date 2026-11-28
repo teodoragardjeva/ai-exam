@@ -4,6 +4,9 @@ import { getStaff } from "@/lib/staff";
 
 export const metadata = { title: "Вход за служители · HomeTech" };
 
+// Checks the session to skip the form for logged-in staff: per-request only.
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   if (await getStaff()) redirect("/staff");
   return (

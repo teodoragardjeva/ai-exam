@@ -5,7 +5,10 @@ import { getAuth, STAFF_ROLES, type StaffRole, type StaffUser } from "@/lib/auth
 // The server-side gate for every staff page and API (our equivalent of Supabase RLS):
 // no session → no access; logged in but not approved → no access, sees nothing.
 export async function getStaff(): Promise<StaffUser | null> {
-  const session = await getAuth().api.getSession({ headers: await headers() });
+  // Read the request headers first: that marks the page as per-request, so the build never
+  // tries to prerender it (and never touches the database, which doesn't exist at build time).
+  const requestHeaders = await headers();
+  const session = await getAuth().api.getSession({ headers: requestHeaders });
   if (!session) return null;
   const user = session.user as typeof session.user & { role?: string; approved?: boolean };
   const role = STAFF_ROLES.includes(user.role as StaffRole) ? (user.role as StaffRole) : "agent";
