@@ -244,6 +244,21 @@ sudo docker exec -e N8N_RUNNERS_BROKER_PORT=5690 ai-exam-stack-n8n-1 n8n execute
 
 След поправките: lint, typecheck, 58 теста, проверка на workflow-ите, build без env и сценариите локално минават.
 
+### CSO одит (скилът CSO от encorp.ai/resources)
+
+Пуснат на 28.11.2026 в daily режим (всички 15 фази, праг на увереност 8/10), върху кода **и** инфраструктурата. Пълният отчет е локално в `.gstack/security-reports/` (не се commit-ва).
+
+**Без критични находки.** Чисто: тайни в историята на git, проследени `.env` файлове, зависимости (`npm audit`: 0 уязвимости, няма install скриптове, lockfile-ът е в git), CI (всички actions по commit SHA, няма `pull_request_target`, токенът само в `with:`), Dockerfile-ът на приложението (`USER nextjs`), изключен TLS, LLM сигурност (текстът на клиента е само в user съобщението, не в system prompt-а; AI изходът се показва като текст; SQL инструментът на асистента е read-only на ниво база), локалните skills.
+
+| # | Сериозност | Находка | Решение |
+|---|---|---|---|
+| 1 | HIGH (9/10, проверено) | Сървърът приема HTTPS директно на IP-то си, покрай Cloudflare, така че WAF правилото за `n8n.robodigit.win` (и rate limit-ът по IP) може да се заобиколи | _предстои решение_: Cloud Firewall 80/443 само от IP диапазоните на Cloudflare |
+| 2 | HIGH (8/10) | Gmail credential-ът в n8n е с подразбиращите се scope-ове, включително пълен достъп до пощата (`https://mail.google.com/`), а е нужно само изпращане | Приет риск (решение на собственика); препоръка: само `gmail.send` и отделна пощенска кутия |
+| 3 | MEDIUM (8/10) | Nginx Proxy Manager работи като root (единственият контейнер, видим от интернет) | Приет риск; порт 81 е затворен |
+| 4 | MEDIUM (9/10) | Няма CODEOWNERS за workflow файловете, които публикуват образите | Оправено: `.github/CODEOWNERS` за `.github/`, `deploy/`, `n8n/`, `Dockerfile` |
+
+Под прага (не са докладвани): разход на OpenAI чрез формата (защитен от Turnstile и rate limit), индиректен prompt injection към асистента през текста на запитванията (само четене, отговорът стига само до мениджъра), Portainer с Docker socket (порт 9443 само от моето IP).
+
 ## Капани, открити по пътя
 
 - **n8n виси на „Initializing n8n process“ без грешка:** ролята `n8n` няма `CREATE` върху базата; n8n пуска `CREATE SCHEMA IF NOT EXISTS` при всеки старт. Грешката се вижда само в лога на Postgres.

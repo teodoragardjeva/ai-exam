@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local security audit reports (/cso) and third-party skills: never committed
+.gstack/
+.claude/skills/
