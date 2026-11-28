@@ -43,11 +43,15 @@ export function parseTrack(body: unknown): Result<TrackInput> {
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
+export const STAFF_SETTABLE_STATUSES: TicketStatus[] = ["New", "Waiting for approval", "Manual review", "Rejected", "Closed"];
+
 export function parseStatusChange(body: unknown): Result<{ status: TicketStatus; reason: string | null }> {
   const b = (body ?? {}) as Record<string, unknown>;
   const status = text(b.status) as TicketStatus;
   const reason = text(b.reason).slice(0, 500) || null;
-  if (!TICKET_STATUSES.includes(status)) return { ok: false, errors: ["status"] };
+  // "Auto-answered" and "Approved & sent" mean an email went out: only the workflows set them
+  // (WF-3, WF-4), so the dashboard can't claim a reply was sent when it wasn't.
+  if (!STAFF_SETTABLE_STATUSES.includes(status)) return { ok: false, errors: ["status"] };
   return { ok: true, value: { status, reason } };
 }
 

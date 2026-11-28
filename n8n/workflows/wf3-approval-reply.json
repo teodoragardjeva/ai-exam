@@ -156,9 +156,36 @@
     },
     {
       "parameters": {
-        "jsCode": "const t = $('Ticket').first().json;\nconst data = $input.first().json.data || $input.first().json;\nconst pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];\nconst decision = String(pick(\"Решение\") ?? \"\");\nconst edited = String(pick(\"Отговор към клиента\") ?? \"\").trim();\nconst comment = String(pick(\"Коментар\") ?? \"\").trim();\nconst approved = decision.startsWith(\"Одобри\");\nreturn [{ json: { ...t,\n  approved,\n  final_status: approved ? \"Approved & sent\" : \"Rejected\",\n  final_reply: approved ? (edited || t.draft_reply) : null,\n  handled_by: (t.manager_email || \"manager\") + \" (Gmail)\",\n  reason: comment ? \"Мениджър: \" + comment : (approved ? \"Одобрено от мениджъра\" : \"Отказано от мениджъра\"),\n} }];"
+        "operation": "executeQuery",
+        "query": "SELECT status FROM tickets WHERE ticket_number = $1",
+        "options": {
+          "queryReplacement": "={{ [ $('Ticket').item.json.ticket_number ] }}"
+        }
       },
       "id": "00000000-0000-4000-8000-000000000056",
+      "name": "Current status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        990,
+        -120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $('Ticket').first().json;\nconst answer = $('Ask manager (Send and Wait)').first().json;\nconst data = answer.data || answer;\nconst pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];\nconst decision = String(pick(\"Решение\") ?? \"\").trim();\nconst edited = String(pick(\"Отговор към клиента\") ?? \"\").trim();\nconst comment = String(pick(\"Коментар\") ?? \"\").trim();\nconst current = $input.first().json.status;\nconst handledBy = (t.manager_email || \"manager\") + \" (Gmail)\";\n\n// stale: already handled elsewhere → do nothing. timeout: no answer within the wait limit →\n// back to manual review, never an automatic rejection.\nlet action;\nif (current !== \"Waiting for approval\") action = \"stale\";\nelse if (!decision) action = \"timeout\";\nelse action = decision.startsWith(\"Одобри\") ? \"approved\" : \"rejected\";\n\nconst out = { ...t, action, approved: action === \"approved\", handled_by: handledBy };\nif (action === \"approved\") {\n  out.final_status = \"Approved & sent\";\n  out.final_reply = edited || t.draft_reply;\n  out.reason = comment ? \"Мениджър: \" + comment : \"Одобрено от мениджъра\";\n} else if (action === \"rejected\") {\n  out.final_status = \"Rejected\";\n  out.reason = comment ? \"Мениджър: \" + comment : \"Отказано от мениджъра\";\n} else if (action === \"timeout\") {\n  out.final_status = \"Manual review\";\n  out.handled_by = null;\n  out.reason = \"Няма отговор от мениджъра в срок: нужен е ръчен преглед\";\n}\nreturn [{ json: out }];"
+      },
+      "id": "00000000-0000-4000-8000-000000000057",
       "name": "Approval result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -178,7 +205,7 @@
           },
           "conditions": [
             {
-              "id": "00000000-0000-4000-8000-000000000057",
+              "id": "00000000-0000-4000-8000-000000000058",
               "leftValue": "={{ $json.approved }}",
               "rightValue": true,
               "operator": {
@@ -193,7 +220,7 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000058",
+      "id": "00000000-0000-4000-8000-000000000059",
       "name": "Approved?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -206,7 +233,7 @@
       "parameters": {
         "jsCode": "const t = $input.first().json;\nreturn [{ json: { ...t, final_status: t.status, final_reply: t.draft_reply, handled_by: \"AI (автоматично)\", reason: null } }];"
       },
-      "id": "00000000-0000-4000-8000-000000000059",
+      "id": "00000000-0000-4000-8000-000000000060",
       "name": "Auto reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -219,7 +246,7 @@
       "parameters": {
         "jsCode": "// Both paths (approved by the manager, or answered automatically) meet here.\nreturn $input.all().map((i) => ({ json: i.json }));"
       },
-      "id": "00000000-0000-4000-8000-000000000060",
+      "id": "00000000-0000-4000-8000-000000000061",
       "name": "Final reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -238,7 +265,7 @@
           "appendAttribution": false
         }
       },
-      "id": "00000000-0000-4000-8000-000000000061",
+      "id": "00000000-0000-4000-8000-000000000062",
       "name": "Email customer",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
@@ -264,7 +291,7 @@
           "queryReplacement": "={{ [ $('Final reply').item.json.ticket_number, $('Final reply').item.json.final_status, $('Final reply').item.json.final_reply, $('Final reply').item.json.handled_by, $('Final reply').item.json.reason ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000062",
+      "id": "00000000-0000-4000-8000-000000000063",
       "name": "Save final reply",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -285,13 +312,13 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE tickets SET status = 'Rejected', handled_by = $2, status_reason = $3 WHERE ticket_number = $1",
+        "query": "UPDATE tickets SET status = $2, handled_by = coalesce($3, handled_by), status_reason = $4\nWHERE ticket_number = $1 AND status = 'Waiting for approval' AND $5::boolean",
         "options": {
-          "queryReplacement": "={{ [ $json.ticket_number, $json.handled_by, $json.reason ] }}"
+          "queryReplacement": "={{ [ $json.ticket_number, $json.final_status || 'Waiting for approval', $json.handled_by, $json.reason || null, $json.action !== 'stale' ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000063",
-      "name": "Save rejection",
+      "id": "00000000-0000-4000-8000-000000000064",
+      "name": "Save decision",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
@@ -365,6 +392,17 @@
       "main": [
         [
           {
+            "node": "Current status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current status": {
+      "main": [
+        [
+          {
             "node": "Approval result",
             "type": "main",
             "index": 0
@@ -394,7 +432,7 @@
         ],
         [
           {
-            "node": "Save rejection",
+            "node": "Save decision",
             "type": "main",
             "index": 0
           }

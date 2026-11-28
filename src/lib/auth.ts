@@ -47,6 +47,9 @@ export async function upsertStaffUser(input: {
   password: string;
   role: StaffRole;
 }): Promise<"created" | "updated"> {
+  if (input.password.length < 10) {
+    throw new Error(`Password for ${input.role} account is shorter than 10 characters`);
+  }
   const ctx = await getAuth().$context;
   const email = input.email.toLowerCase();
   const hash = await ctx.password.hash(input.password);
@@ -66,7 +69,10 @@ export async function upsertStaffUser(input: {
     return "created";
   }
 
-  await ctx.internalAdapter.updateUser(existing.user.id, { name: input.name, role: input.role, approved: true });
+  // Existing accounts keep their "approved" flag: a manager who disabled an account
+  // (approved = false) must not see it re-enabled by the next deploy. The password still
+  // follows the env value, so changing it in the stack and redeploying works.
+  await ctx.internalAdapter.updateUser(existing.user.id, { name: input.name, role: input.role });
   const credential = existing.accounts.find((a) => a.providerId === "credential");
   if (credential) {
     await ctx.internalAdapter.updatePassword(existing.user.id, hash);

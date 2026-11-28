@@ -37,7 +37,13 @@ export async function verifyTurnstile(
   }
 }
 
-// Cloudflare puts the visitor's real IP here; NPM forwards the header to the app.
+// Cloudflare puts the visitor's real IP in cf-connecting-ip. That header is only trustworthy
+// when the origin accepts traffic from Cloudflare alone (Cloud Firewall: 80/443 only from
+// Cloudflare's IP ranges, see README). Without it, fall back to the LAST X-Forwarded-For hop,
+// the one NPM itself added; earlier entries are whatever the client sent.
 export function clientIp(headers: Headers): string | null {
-  return headers.get("cf-connecting-ip") ?? headers.get("x-forwarded-for")?.split(",")[0].trim() ?? null;
+  const cf = headers.get("cf-connecting-ip")?.trim();
+  if (cf) return cf;
+  const hops = headers.get("x-forwarded-for")?.split(",").map((h) => h.trim()).filter(Boolean);
+  return hops?.length ? hops[hops.length - 1] : null;
 }

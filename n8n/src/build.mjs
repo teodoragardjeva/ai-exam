@@ -204,7 +204,8 @@ const INJECTION_HEURISTICS = String.raw`const patterns = [
   [/ignore (all |any )?(the )?(previous|prior|above) (instructions|rules|prompts?)/i, "ignore previous instructions"],
   [/игнорирай(те)? (всички )?(предишни|горни)/i, "игнорирай предишните инструкции"],
   [/(disregard|forget) (all |your )?(previous |prior )?(instructions|rules)/i, "disregard instructions"],
-  [/(you are now|from now on you are|act as|pretend to be)\b/i, "role change"],
+  // "act as" only with a role, so "can the plug act as a timer?" is not flagged.
+  [/(you are now|from now on you are|pretend to be|act as (an? |the )?(ai|assistant|manager|admin|administrator|system|developer|refund))\b/i, "role change"],
   [/(ти вече си|от сега нататък си|държи се като|представи се за)/i, "смяна на ролята"],
   [/(system prompt|системн(ия|ият) промпт|developer mode|jailbreak|\bDAN\b)/i, "system prompt / jailbreak"],
   [/(одобри|approve).{0,40}(връщане|refund).{0,40}(€|eur|лв|\d)/i, "instructs to approve a refund"],
@@ -316,7 +317,7 @@ function intake() {
       "Find order (R1)",
       `SELECT order_number, customer_name, customer_email, product,
        to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, amount_eur::float8 AS amount_eur,
-       delivery_status, to_char(CURRENT_DATE, 'YYYY-MM-DD') AS today
+       delivery_status, to_char((now() AT TIME ZONE 'Europe/Sofia')::date, 'YYYY-MM-DD') AS today
 FROM orders
 WHERE order_number = upper(trim($1)) AND lower(customer_email) = lower(trim($2))`,
       "={{ [ $json.body.order_number, $json.body.email ] }}",
@@ -327,10 +328,10 @@ WHERE order_number = upper(trim($1)) AND lower(customer_email) = lower(trim($2))
     respond("Respond: order not found", '={{ { "ok": false, "error": "order_mismatch" } }}', [660, 180]),
     pg(
       "Create ticket",
-      `INSERT INTO tickets (order_number, customer_name, customer_email, message)
-VALUES ($1, $2, $3, $4)
+      `INSERT INTO tickets (order_number, customer_name, customer_email, message, n8n_execution_id)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING ticket_number`,
-      "={{ [ $json.order_number, $('Webhook').item.json.body.name, $('Webhook').item.json.body.email, $('Webhook').item.json.body.message ] }}",
+      "={{ [ $json.order_number, $('Webhook').item.json.body.name, $('Webhook').item.json.body.email, $('Webhook').item.json.body.message, $execution.id ] }}",
       [660, -80],
       RETRY,
     ),
@@ -663,22 +664,48 @@ AI чернова на отговор:
       [880, -120],
       { credentials: CRED.gmail, webhookId: "6a9b2d3f-8c4e-4f70-ab2c-3d4e5f6a7b82", ...RETRY },
     ),
+    // The answer may come days later: re-read the ticket so a late click never overwrites a
+    // ticket that staff already answered from the dashboard (WF-4) or closed.
+    pg(
+      "Current status",
+      `SELECT status FROM tickets WHERE ticket_number = $1`,
+      "={{ [ $('Ticket').item.json.ticket_number ] }}",
+      [990, -120],
+      { alwaysOutputData: true, ...RETRY },
+    ),
     code(
       "Approval result",
       `const t = $('Ticket').first().json;
-const data = $input.first().json.data || $input.first().json;
+const answer = $('Ask manager (Send and Wait)').first().json;
+const data = answer.data || answer;
 const pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];
-const decision = String(pick("Решение") ?? "");
+const decision = String(pick("Решение") ?? "").trim();
 const edited = String(pick("Отговор към клиента") ?? "").trim();
 const comment = String(pick("Коментар") ?? "").trim();
-const approved = decision.startsWith("Одобри");
-return [{ json: { ...t,
-  approved,
-  final_status: approved ? "Approved & sent" : "Rejected",
-  final_reply: approved ? (edited || t.draft_reply) : null,
-  handled_by: (t.manager_email || "manager") + " (Gmail)",
-  reason: comment ? "Мениджър: " + comment : (approved ? "Одобрено от мениджъра" : "Отказано от мениджъра"),
-} }];`,
+const current = $input.first().json.status;
+const handledBy = (t.manager_email || "manager") + " (Gmail)";
+
+// stale: already handled elsewhere → do nothing. timeout: no answer within the wait limit →
+// back to manual review, never an automatic rejection.
+let action;
+if (current !== "Waiting for approval") action = "stale";
+else if (!decision) action = "timeout";
+else action = decision.startsWith("Одобри") ? "approved" : "rejected";
+
+const out = { ...t, action, approved: action === "approved", handled_by: handledBy };
+if (action === "approved") {
+  out.final_status = "Approved & sent";
+  out.final_reply = edited || t.draft_reply;
+  out.reason = comment ? "Мениджър: " + comment : "Одобрено от мениджъра";
+} else if (action === "rejected") {
+  out.final_status = "Rejected";
+  out.reason = comment ? "Мениджър: " + comment : "Отказано от мениджъра";
+} else if (action === "timeout") {
+  out.final_status = "Manual review";
+  out.handled_by = null;
+  out.reason = "Няма отговор от мениджъра в срок: нужен е ръчен преглед";
+}
+return [{ json: out }];`,
       [1100, -120],
     ),
     ifTrue("Approved?", "={{ $json.approved }}", [1320, -120]),
@@ -716,10 +743,12 @@ WHERE ticket_number = $1`,
       [1760, 0],
       RETRY,
     ),
+    // Rejected or timed out; a stale answer (ticket already handled) changes nothing.
     pg(
-      "Save rejection",
-      `UPDATE tickets SET status = 'Rejected', handled_by = $2, status_reason = $3 WHERE ticket_number = $1`,
-      "={{ [ $json.ticket_number, $json.handled_by, $json.reason ] }}",
+      "Save decision",
+      `UPDATE tickets SET status = $2, handled_by = coalesce($3, handled_by), status_reason = $4
+WHERE ticket_number = $1 AND status = 'Waiting for approval' AND $5::boolean`,
+      "={{ [ $json.ticket_number, $json.final_status || 'Waiting for approval', $json.handled_by, $json.reason || null, $json.action !== 'stale' ] }}",
       [1540, -260],
       RETRY,
     ),
@@ -730,10 +759,11 @@ WHERE ticket_number = $1`,
     ["Ticket", "Needs approval?"],
     ["Needs approval?", "Ask manager (Send and Wait)", "main", 0],
     ["Needs approval?", "Auto reply", "main", 1],
-    ["Ask manager (Send and Wait)", "Approval result"],
+    ["Ask manager (Send and Wait)", "Current status"],
+    ["Current status", "Approval result"],
     ["Approval result", "Approved?"],
     ["Approved?", "Final reply", "main", 0],
-    ["Approved?", "Save rejection", "main", 1],
+    ["Approved?", "Save decision", "main", 1],
     ["Auto reply", "Final reply"],
     ["Final reply", "Email customer"],
     ["Email customer", "Save final reply"],
@@ -1037,7 +1067,17 @@ function errors() {
       [220, 0],
       { ...RETRY, continueOnFail: true },
     ),
-    pg("Manager email", `SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'`, null, [440, 0], {
+    // A ticket whose triage failed would stay "New" forever: send it to manual review.
+    pg(
+      "Ticket to manual review",
+      `UPDATE tickets SET status = 'Manual review',
+  status_reason = 'Автоматичната обработка спря с грешка: ' || left($2, 200)
+WHERE n8n_execution_id = $1 AND status = 'New'`,
+      "={{ [ String($('Error Trigger').item.json.execution.id), ($('Error Trigger').item.json.execution.error && $('Error Trigger').item.json.execution.error.message) || 'неизвестна грешка' ] }}",
+      [440, 0],
+      { ...RETRY, continueOnFail: true, alwaysOutputData: true },
+    ),
+    pg("Manager email", `SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'`, null, [660, 0], {
       alwaysOutputData: true,
     }),
     node(
@@ -1052,13 +1092,14 @@ function errors() {
           "=Workflow: {{ $('Error Trigger').item.json.workflow.name }}\nНод: {{ $('Error Trigger').item.json.execution.lastNodeExecuted }}\nГрешка: {{ $('Error Trigger').item.json.execution.error.message }}\nИзпълнение: {{ $('Error Trigger').item.json.execution.url }}",
         options: { appendAttribution: false },
       },
-      [660, 0],
+      [880, 0],
       { credentials: CRED.gmail, continueOnFail: true },
     ),
   ];
   return workflow(IDS.errors, "WF-E Error handler (error_log + email)", nodes, [
     ["Error Trigger", "Write error_log"],
-    ["Write error_log", "Manager email"],
+    ["Write error_log", "Ticket to manual review"],
+    ["Ticket to manual review", "Manager email"],
     ["Manager email", "Notify manager"],
   ]);
 }

@@ -49,7 +49,12 @@ describe("clientIp", () => {
     expect(clientIp(new Headers({ "cf-connecting-ip": "1.1.1.1", "x-forwarded-for": "2.2.2.2" }))).toBe("1.1.1.1");
   });
 
-  it("falls back to the first x-forwarded-for entry", () => {
-    expect(clientIp(new Headers({ "x-forwarded-for": "3.3.3.3, 10.0.0.1" }))).toBe("3.3.3.3");
+  it("falls back to the last x-forwarded-for hop (the one our proxy added), not a client-sent one", () => {
+    expect(clientIp(new Headers({ "x-forwarded-for": "6.6.6.6, 3.3.3.3" }))).toBe("3.3.3.3");
+    expect(clientIp(new Headers({ "x-forwarded-for": "3.3.3.3" }))).toBe("3.3.3.3");
+  });
+
+  it("returns null without any client IP header", () => {
+    expect(clientIp(new Headers())).toBeNull();
   });
 });

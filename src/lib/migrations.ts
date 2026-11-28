@@ -196,4 +196,13 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // The n8n execution that triaged the ticket: if it fails, the Error Workflow moves exactly
+    // that ticket to Manual review instead of leaving it "New" forever.
+    id: "010_tickets_execution_id",
+    sql: `
+      ALTER TABLE tickets ADD COLUMN n8n_execution_id text;
+      CREATE INDEX tickets_n8n_execution_idx ON tickets (n8n_execution_id);
+    `,
+  },
 ];
