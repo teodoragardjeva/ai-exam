@@ -53,6 +53,7 @@
 - Списък, който се обновява на живо, с филтри по статус, отдел и спешност; спешните са с червен фон.
 - Детайл: съобщение, AI резюме, настроение (сила и увереност), отдел, спешност, правило и причина, AI чернова, финален отговор.
 - Смяна на статус (напр. Затворено). Редакция на черновата и изпращане директно от таблото (WF-4).
+- **Асистент за мениджъра** (`/staff/assistant`, само роля мениджър): въпроси като „Колко искания за връщане на пари имахме тази седмица?“ или „Покажи всички High запитвания, които още са отворени“. Помни разговора; може само да чете.
 - Интерфейсът е на български; в базата и n8n стойностите са на английски, както в заданието.
 
 ## n8n workflow-и
@@ -65,6 +66,7 @@ Workflow-ите са в `n8n/workflows/*.json` и се генерират от �
 | **WF-2 Intake & triage** | Webhook `POST /webhook/ticket-intake`, Header Auth | R1 (поръчка + имейл от `orders`) → записва запитването и **веднага** връща номера → injection проверка (правила + AI Text Classifier, при откриване: `security_log` и ръчен преглед) → Sentiment Analysis (сила и увереност) → Text Classifier (5 отдела) → AI Agent с наръчника като vector-store tool и Structured Output Parser → проверка на JSON-а → правила R2–R8 (Code нод) → запис → WF-3 |
 | **WF-3 Approval & reply** | Execute Workflow (от WF-2) | За „Чака одобрение“: Gmail **Send and Wait** с Custom Form (решение, редактиран отговор, коментар) до мениджъра → статус, финален отговор, обработено от → имейл до клиента. За автоматичните отговори (R2, R7) и R5: директно имейл до клиента. |
 | **WF-4 Send reply** | Webhook `POST /webhook/send-reply`, Header Auth | Служителят изпраща редактирания отговор от таблото → Gmail → „Одобрено и изпратено“ |
+| **WF-5 Manager assistant** | Webhook `POST /webhook/manager-assistant`, Header Auth | Чат за мениджъра: AI Agent + Postgres Chat Memory (по мениджър и разговор) + Postgres tool само за четене (роля `n8n_readonly`, read-only на ниво база, timeout 5 s) |
 | **WF-E Errors** | Error Trigger (избран във всички WF) | Записва в `error_log` (workflow, нод, съобщение, URL на изпълнението, време) и праща имейл на мениджъра |
 
 - **Retry On Fail** (3 опита) на AI, Postgres и Gmail нодовете.
@@ -118,12 +120,12 @@ AI определя само **какво иска** клиентът (`refund_r
 | `tickets` | Запитванията с всички AI полета, правило, статус, причина, обработено от. Trigger праща `NOTIFY tickets_changed` |
 | `kb_documents` | Парчетата от наръчника с `vector(1536)` и метаданни (`source`, `section`) |
 | `security_log`, `error_log` | Откритите опити за injection; грешките от n8n |
-| `n8n_chat_histories` | Паметта на чата (Postgres Chat Memory) |
+| `n8n_app.n8n_chat_histories` | Паметта на чата на асистента (Postgres Chat Memory) |
 | `app_settings` | Настройки за n8n (имейл на мениджъра), за да не ползва n8n env променливи |
 | `user`, `session`, `account`, `verification` | Better Auth |
 | схема `n8n` | Собствените данни на n8n (отделна роля) |
 
-**DB роли:** `app` (собственик, само приложението), `n8n` (само схемата `n8n`), `n8n_app` (workflow-ите: четене на `orders`, запис на `tickets`, KB, логове; **без** изтриване на запитвания и без достъп до таблиците за вход), `n8n_readonly` (само `SELECT`).
+**DB роли:** `app` (собственик, само приложението), `n8n` (само схемата `n8n`), `n8n_app` (workflow-ите: четене на `orders`, запис на `tickets`, KB, логове, своя схема `n8n_app` за паметта на чата; **без** изтриване на запитвания, без `CREATE` в `public` и без достъп до таблиците за вход), `n8n_readonly` (само `SELECT` на `tickets` и `orders`, read-only транзакции, timeout 5 s).
 
 ## Сигурност
 
@@ -215,7 +217,7 @@ sudo docker exec -e N8N_RUNNERS_BROKER_PORT=5690 ai-exam-stack-n8n-1 n8n execute
 - Откриването на injection е евристики + AI класификатор: може да пропусне нов тип атака; правилата пак не дават автоматични обещания.
 - Настроението зависи от модела (`gpt-5-mini`); праговете са проверени само на сценариите от заданието.
 - Droplet-ът не е създаден с cloud-init (hardening-ът е направен на място).
-- Още не са направени: асистент за мениджъра, снимка към запитването, дневен отчет, reranking.
+- Още не са направени: снимка към запитването, дневен отчет, reranking.
 
 ## Code review и security review
 
@@ -226,6 +228,7 @@ _Попълва се след `/code-review` и `/security-review`._
 - **n8n виси на „Initializing n8n process“ без грешка:** ролята `n8n` няма `CREATE` върху базата; n8n пуска `CREATE SCHEMA IF NOT EXISTS` при всеки старт. Грешката се вижда само в лога на Postgres.
 - **`uuid-ossp` в схемата на n8n:** разширението живее в една схема на база; затова таблиците ни ползват вградената `gen_random_uuid()`.
 - **n8n 2.x иска Postgres 17+.**
+- **Postgres Chat Memory изпълнява `CREATE TABLE IF NOT EXISTS` при всяко извикване:** иска право CREATE в схемата; затова паметта е в собствена схема на ролята, не в `public`.
 - **Публикуване на workflow, който вика под-workflow,** става само след под-workflow-а (WF-2 → WF-3); autoload-ът публикува на два прохода.
 - **`gpt-5-mini` не приема `temperature`** („Bad request“).
 - **Production build без env:** служебните страници са `force-dynamic` и четат headers преди базата, иначе build-ът се опитва да ги рендерира предварително.
