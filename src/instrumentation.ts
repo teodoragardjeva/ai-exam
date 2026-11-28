@@ -36,4 +36,27 @@ export async function register() {
     await ensureDemoOrders(pool, demoEmail, process.env.DEMO_ORDER_NAME || "Тест Клиент");
     console.log("[startup] demo orders HT-10501, HT-10502 ready");
   }
+
+  // Staff login (Better Auth): its own tables, then the accounts from env.
+  if (!process.env.BETTER_AUTH_SECRET) {
+    console.warn("[startup] BETTER_AUTH_SECRET is not set, staff login is disabled");
+    return;
+  }
+  const { getMigrations } = await import("better-auth/db/migration");
+  const { authOptions, upsertStaffUser } = await import("@/lib/auth");
+  await (await getMigrations(authOptions())).runMigrations();
+  console.log("[startup] auth tables ready");
+
+  const accounts = [
+    { prefix: "STAFF_MANAGER", role: "manager" as const },
+    { prefix: "STAFF_AGENT", role: "agent" as const },
+  ];
+  for (const { prefix, role } of accounts) {
+    const email = process.env[`${prefix}_EMAIL`];
+    const password = process.env[`${prefix}_PASSWORD`];
+    if (!email || !password) continue;
+    const name = process.env[`${prefix}_NAME`] || (role === "manager" ? "Мениджър" : "Служител");
+    const result = await upsertStaffUser({ email, name, password, role });
+    console.log(`[startup] staff ${role} ${result}`);
+  }
 }

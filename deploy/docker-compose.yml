@@ -26,6 +26,15 @@ services:
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       DEMO_ORDER_EMAIL: ${DEMO_ORDER_EMAIL:-}
       DEMO_ORDER_NAME: ${DEMO_ORDER_NAME:-}
+      # Staff login (Better Auth). Accounts are created/updated on every start.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://ai-exam.robodigit.win}
+      STAFF_MANAGER_EMAIL: ${STAFF_MANAGER_EMAIL:-}
+      STAFF_MANAGER_NAME: ${STAFF_MANAGER_NAME:-}
+      STAFF_MANAGER_PASSWORD: ${STAFF_MANAGER_PASSWORD:-}
+      STAFF_AGENT_EMAIL: ${STAFF_AGENT_EMAIL:-}
+      STAFF_AGENT_NAME: ${STAFF_AGENT_NAME:-}
+      STAFF_AGENT_PASSWORD: ${STAFF_AGENT_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
