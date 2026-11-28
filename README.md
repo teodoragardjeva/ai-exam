@@ -187,7 +187,7 @@ npm run scenarios      # 10-те сценария (вдигни TICKETS_RATE_LIM
 
 **Сървър:** Ubuntu 24.04, потребител `deploy` (SSH ключ, sudo), **вход с root и с парола забранени**, `unattended-upgrades`, 2 GB swap (`deploy/harden.sh`). `deploy/cloud-init.yml` създава същото на нов droplet. Стекът е `deploy/docker-compose.yml` (Portainer, Repository); NPM и Portainer са в `deploy/nginx-proxy-manager/` и `deploy/portainer/`.
 
-**Cloud Firewall (DigitalOcean):** 80/443 отворени за интернет (препоръчително само от IP диапазоните на Cloudflare, https://www.cloudflare.com/ips/, за да не може никой да заобиколи Cloudflare и да подправи `cf-connecting-ip`); 22 и 9443 само от моето IP; 81 (NPM админ) и всичко останало затворено; до NPM се стига през SSH тунел:
+**Cloud Firewall (DigitalOcean):** 80/443 само от IP диапазоните на Cloudflare (https://www.cloudflare.com/ips/): посетителите идват през Cloudflare, а директна връзка към IP-то на сървъра (покрай WAF-а и с подправен `cf-connecting-ip`) не минава. 22 и 9443 само от моето IP; 81 (NPM админ) и всичко останало затворено; до NPM се стига през SSH тунел:
 
 ```bash
 ssh -N -L 8181:127.0.0.1:81 deploy@<server-ip>     # после http://localhost:8181
@@ -252,7 +252,7 @@ sudo docker exec -e N8N_RUNNERS_BROKER_PORT=5690 ai-exam-stack-n8n-1 n8n execute
 
 | # | Сериозност | Находка | Решение |
 |---|---|---|---|
-| 1 | HIGH (9/10, проверено) | Сървърът приема HTTPS директно на IP-то си, покрай Cloudflare, така че WAF правилото за `n8n.robodigit.win` (и rate limit-ът по IP) може да се заобиколи | _предстои решение_: Cloud Firewall 80/443 само от IP диапазоните на Cloudflare |
+| 1 | HIGH (9/10, проверено) | Сървърът приема HTTPS директно на IP-то си, покрай Cloudflare, така че WAF правилото за `n8n.robodigit.win` (и rate limit-ът по IP) може да се заобиколи | **Оправено:** Cloud Firewall пуска 80/443 само от 22-та диапазона на Cloudflare. Проверено: директна заявка към IP-то не получава отговор, а през домейните всичко връща 200 |
 | 2 | HIGH (8/10) | Gmail credential-ът в n8n е с подразбиращите се scope-ове, включително пълен достъп до пощата (`https://mail.google.com/`), а е нужно само изпращане | Приет риск (решение на собственика); препоръка: само `gmail.send` и отделна пощенска кутия |
 | 3 | MEDIUM (8/10) | Nginx Proxy Manager работи като root (единственият контейнер, видим от интернет) | Приет риск; порт 81 е затворен |
 | 4 | MEDIUM (9/10) | Няма CODEOWNERS за workflow файловете, които публикуват образите | Оправено: `.github/CODEOWNERS` за `.github/`, `deploy/`, `n8n/`, `Dockerfile` |
