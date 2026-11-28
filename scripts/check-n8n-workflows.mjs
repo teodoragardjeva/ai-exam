@@ -1,10 +1,10 @@
 // Every file in n8n/workflows needs a unique top-level "id" (16 letters/digits).
 // n8n's autoload uses it to update the same workflow on each start instead of adding a copy.
 // Usage: npm run check:n8n   (also runs in CI)
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 const dir = "n8n/workflows";
-const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")) : [];
 const seen = new Map();
 let ok = true;
 
