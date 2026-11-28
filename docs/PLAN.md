@@ -55,7 +55,7 @@
 
 | WF | Тригер | Какво прави |
 |---|---|---|
-| WF-1 KB load | Ръчно | Наръчникът (Приложение А) от Code нод → text splitter → embeddings → `kb_documents`. Първо трие по `source`, затова повторно пускане не прави дубликати |
+| WF-1 KB load | Ръчно | Наръчникът (Приложение А) като текст в нод (Set + Split Out) → text splitter → embeddings → `kb_documents`. Първо трие по `source`, затова повторно пускане не прави дубликати |
 | WF-2 Intake & triage | Webhook POST, Header Auth | R1 (поръчка + имейл) → запис `New` → **отговаря веднага с номера** → injection проверка → Sentiment (score + confidence) → Text Classifier (5 отдела) → AI Agent с vector-store tool, Structured Output Parser (`summary, draft_reply, answer_found_in_kb, refund_requested, defect_reported, language`) → Code „правила“ (R6 → R2–R5 → R7 → R8) → update на запитването → при Auto-answered извиква изпращането на имейл, при Waiting for approval — WF-3 |
 | WF-3 Approval & reply | Execute Workflow (от WF-2) | Send and Wait (Gmail node, Custom Form: одобри/откажи, редактиран текст, коментар) → update (статус, final_reply, handled_by) → имейл до клиента |
 | WF-4 Send reply | Webhook (от таблото) | Изпраща редактирания отговор, статус Approved & sent |
@@ -146,4 +146,5 @@ Commit на всеки работещ етап. Ако нещо се счупи,
 | Gmail през SMTP с app password | Gmail node (OAuth2) | Акаунтът вече беше свързан; заданието изрично споменава Gmail |
 | R6 при сила **или** увереност ≥ 0.8 | Сила **и** увереност ≥ 0.8, плюс калибриран промпт за настроението | При първото пускане спокойни съобщения (сценарии 1 и 3) попадаха в R6 |
 | Собствен имейл на една от поръчките от Приложение Б | Две отделни демо поръчки (HT-10501/HT-10502) чрез env | Сценариите на менторите с „верния имейл“ трябва да минават R1 |
-| Workflow-и, писани в UI на n8n | Генерирани от код (`n8n/src/build.mjs`) | Кодът на правилата в n8n е същият, който е покрит с unit тестове |
+| Workflow-и, писани в UI на n8n | Генерирани от код (`n8n/src/build.mjs`) | Версионирани в git, проверявани в CI |
+| Правилата и подготовката на данни в Code нодове, SQL заявки | Switch „Бизнес правила“ + Set/IF нодове; Postgres Select/Insert/Update | Преподавателите предпочитат нодове пред код: workflow-ът се чете без програмиране |

@@ -32,7 +32,7 @@ sudo docker logs ai-exam-stack-n8n-1 2>&1 | grep autoload
 
 ## Промяна на workflow
 
-1. Промени `n8n/src/build.mjs` (или `rules.cjs` / `handbook.cjs`), после `npm run n8n:build`. Правилата имат unit тестове: `npm test`.
+1. Промени `n8n/src/build.mjs` (правилата са Switch нодът „Бизнес правила“ в WF-2; `rules.cjs` е тяхната спецификация с тестове) или `handbook.cjs`, после `npm run n8n:build`. Правилата имат unit тестове: `npm test`.
 2. Локално: `npm run dev:services -- --build n8n` и `npm run scenarios`.
 3. Commit → PR → merge. CI (`npm run check:n8n`) спира, ако JSON-ът не съвпада с генератора или някой workflow няма уникално 16-символно `id`.
 4. Portainer → стека → Pull and redeploy с re-pull.

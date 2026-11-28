@@ -63,7 +63,8 @@ export const GRANTS: { role: string; sql: string[] }[] = [
       "GRANT SELECT, INSERT, UPDATE ON tickets TO n8n_app",
       "GRANT USAGE, SELECT ON SEQUENCE tickets_id_seq, ticket_number_seq TO n8n_app",
       "GRANT SELECT, INSERT, UPDATE, DELETE ON kb_documents TO n8n_app",
-      "GRANT INSERT ON security_log, error_log TO n8n_app",
+      // SELECT too: the Postgres node's Insert operation returns the inserted row (RETURNING *).
+      "GRANT SELECT, INSERT ON security_log, error_log TO n8n_app",
       "GRANT USAGE ON SEQUENCE security_log_id_seq, error_log_id_seq TO n8n_app",
       "GRANT SELECT, INSERT, DELETE ON n8n_app.n8n_chat_histories TO n8n_app",
       "GRANT USAGE, SELECT ON SEQUENCE n8n_app.n8n_chat_histories_id_seq TO n8n_app",

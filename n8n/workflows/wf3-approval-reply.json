@@ -6,7 +6,7 @@
       "parameters": {
         "inputSource": "passthrough"
       },
-      "id": "00000000-0000-4000-8000-000000000056",
+      "id": "00000000-0000-4000-8000-000000000143",
       "name": "From WF-2",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
@@ -17,11 +17,34 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'",
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "app_settings",
+          "cachedResultName": "app_settings"
+        },
+        "returnAll": false,
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "key",
+              "condition": "equal",
+              "value": "manager_email"
+            }
+          ]
+        },
+        "combineConditions": "AND",
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000057",
+      "id": "00000000-0000-4000-8000-000000000144",
       "name": "Manager email",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -42,12 +65,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const t = $('From WF-2').first().json;\nconst manager = $input.first().json.manager_email || null;\nreturn [{ json: { ...t, manager_email: manager } }];"
+        "mode": "raw",
+        "jsonOutput": "={{ { ...$('From WF-2').item.json, manager_email: $json.value || null } }}",
+        "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000058",
+      "id": "00000000-0000-4000-8000-000000000145",
       "name": "Ticket",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
         440,
         0
@@ -64,7 +89,7 @@
           },
           "conditions": [
             {
-              "id": "00000000-0000-4000-8000-000000000059",
+              "id": "00000000-0000-4000-8000-000000000146",
               "leftValue": "={{ $json.needs_approval }}",
               "rightValue": true,
               "operator": {
@@ -79,7 +104,7 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000060",
+      "id": "00000000-0000-4000-8000-000000000147",
       "name": "Needs approval?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -135,13 +160,13 @@
           }
         }
       },
-      "id": "00000000-0000-4000-8000-000000000061",
+      "id": "00000000-0000-4000-8000-000000000148",
       "name": "Ask manager (Send and Wait)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
         880,
-        -120
+        -160
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -156,19 +181,40 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT status FROM tickets WHERE ticket_number = $1",
-        "options": {
-          "queryReplacement": "={{ [ $('Ticket').item.json.ticket_number ] }}"
-        }
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "tickets",
+          "cachedResultName": "tickets"
+        },
+        "returnAll": false,
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "ticket_number",
+              "condition": "equal",
+              "value": "={{ $('Ticket').item.json.ticket_number }}"
+            }
+          ]
+        },
+        "combineConditions": "AND",
+        "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000062",
+      "id": "00000000-0000-4000-8000-000000000149",
       "name": "Current status",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        990,
-        -120
+        1100,
+        -160
       ],
       "credentials": {
         "postgres": {
@@ -183,121 +229,316 @@
     },
     {
       "parameters": {
-        "jsCode": "const t = $('Ticket').first().json;\nconst answer = $('Ask manager (Send and Wait)').first().json;\nconst data = answer.data || answer;\nconst pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];\nconst decision = String(pick(\"Решение\") ?? \"\").trim();\nconst edited = String(pick(\"Отговор към клиента\") ?? \"\").trim();\nconst comment = String(pick(\"Коментар\") ?? \"\").trim();\nconst current = $input.first().json.status;\nconst handledBy = (t.manager_email || \"manager\") + \" (Gmail)\";\n\n// stale: already handled elsewhere → do nothing. timeout: no answer within the wait limit →\n// back to manual review, never an automatic rejection.\nlet action;\nif (current !== \"Waiting for approval\") action = \"stale\";\nelse if (!decision) action = \"timeout\";\nelse action = decision.startsWith(\"Одобри\") ? \"approved\" : \"rejected\";\n\nconst out = { ...t, action, approved: action === \"approved\", handled_by: handledBy };\nif (action === \"approved\") {\n  out.final_status = \"Approved & sent\";\n  out.final_reply = edited || t.draft_reply;\n  out.reason = comment ? \"Мениджър: \" + comment : \"Одобрено от мениджъра\";\n} else if (action === \"rejected\") {\n  out.final_status = \"Rejected\";\n  out.reason = comment ? \"Мениджър: \" + comment : \"Отказано от мениджъра\";\n} else if (action === \"timeout\") {\n  out.final_status = \"Manual review\";\n  out.handled_by = null;\n  out.reason = \"Няма отговор от мениджъра в срок: нужен е ръчен преглед\";\n}\nreturn [{ json: out }];"
-      },
-      "id": "00000000-0000-4000-8000-000000000063",
-      "name": "Approval result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1100,
-        -120
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "00000000-0000-4000-8000-000000000064",
-              "leftValue": "={{ $json.approved }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "looseTypeValidation": true,
+        "mode": "raw",
+        "jsonOutput": "={{ { ...$('Ticket').item.json, current_status: $json.status,\n  decision: String(($('Ask manager (Send and Wait)').item.json.data || $('Ask manager (Send and Wait)').item.json)['Решение'] || '').trim(),\n  edited_reply: String(($('Ask manager (Send and Wait)').item.json.data || $('Ask manager (Send and Wait)').item.json)['Отговор към клиента'] || '').trim(),\n  comment: String(($('Ask manager (Send and Wait)').item.json.data || $('Ask manager (Send and Wait)').item.json)['Коментар'] || '').trim() } }}",
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000065",
-      "name": "Approved?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "00000000-0000-4000-8000-000000000150",
+      "name": "Отговор на мениджъра",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
         1320,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000151",
+                    "leftValue": "={{ $json.current_status !== 'Waiting for approval' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Вече обработено"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000152",
+                    "leftValue": "={{ !$json.decision }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Няма отговор"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000153",
+                    "leftValue": "={{ $json.decision.startsWith('Одобри') }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Одобрено"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Отказано"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000154",
+      "name": "Какво реши мениджърът?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1540,
+        -160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "00000000-0000-4000-8000-000000000155",
+      "name": "Нищо не се променя",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00000000-0000-4000-8000-000000000156",
+              "name": "final_status",
+              "value": "Manual review",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000157",
+              "name": "handled_by",
+              "value": "={{ null }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000158",
+              "name": "reason",
+              "value": "Няма отговор от мениджъра в срок: нужен е ръчен преглед",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000159",
+      "name": "Без отговор",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00000000-0000-4000-8000-000000000160",
+              "name": "final_status",
+              "value": "Approved & sent",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000161",
+              "name": "final_reply",
+              "value": "={{ $json.edited_reply || $json.draft_reply }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000162",
+              "name": "handled_by",
+              "value": "={{ ($json.manager_email || 'manager') + ' (Gmail)' }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000163",
+              "name": "reason",
+              "value": "={{ $json.comment ? 'Мениджър: ' + $json.comment : 'Одобрено от мениджъра' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000164",
+      "name": "Одобрено",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
         -120
       ]
     },
     {
       "parameters": {
-        "jsCode": "const t = $input.first().json;\nreturn [{ json: { ...t, final_status: t.status, final_reply: t.draft_reply, handled_by: \"AI (автоматично)\", reason: null } }];"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00000000-0000-4000-8000-000000000165",
+              "name": "final_status",
+              "value": "Rejected",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000166",
+              "name": "handled_by",
+              "value": "={{ ($json.manager_email || 'manager') + ' (Gmail)' }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000167",
+              "name": "reason",
+              "value": "={{ $json.comment ? 'Мениджър: ' + $json.comment : 'Отказано от мениджъра' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000066",
-      "name": "Auto reply",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "00000000-0000-4000-8000-000000000168",
+      "name": "Отказано",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        880,
-        140
+        1760,
+        20
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Both paths (approved by the manager, or answered automatically) meet here.\nreturn $input.all().map((i) => ({ json: i.json }));"
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "tickets",
+          "cachedResultName": "tickets"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ticket_number": "={{ $json.ticket_number }}",
+            "status": "={{ $json.final_status }}",
+            "handled_by": "={{ $json.handled_by }}",
+            "status_reason": "={{ $json.reason }}"
+          },
+          "matchingColumns": [
+            "ticket_number"
+          ],
+          "schema": [
+            {
+              "id": "ticket_number",
+              "displayName": "ticket_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status_reason",
+              "displayName": "status_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000067",
-      "name": "Final reply",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1320,
-        140
-      ]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.email }}",
-        "subject": "=HomeTech поддръжка: {{ $json.ticket_number }}",
-        "emailType": "text",
-        "message": "={{ $json.final_reply }}",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "id": "00000000-0000-4000-8000-000000000068",
-      "name": "Email customer",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        1540,
-        0
-      ],
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "gmailAccountCrd1",
-          "name": "Gmail account"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE tickets SET status = $2, final_reply = $3, handled_by = $4, status_reason = coalesce($5, status_reason)\nWHERE ticket_number = $1",
-        "options": {
-          "queryReplacement": "={{ [ $('Final reply').item.json.ticket_number, $('Final reply').item.json.final_status, $('Final reply').item.json.final_reply, $('Final reply').item.json.handled_by, $('Final reply').item.json.reason ] }}"
-        }
-      },
-      "id": "00000000-0000-4000-8000-000000000069",
-      "name": "Save final reply",
+      "id": "00000000-0000-4000-8000-000000000169",
+      "name": "Save decision",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        1760,
-        0
+        1980,
+        -160
       ],
       "credentials": {
         "postgres": {
@@ -311,19 +552,171 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE tickets SET status = $2, handled_by = coalesce($3, handled_by), status_reason = $4\nWHERE ticket_number = $1 AND status = 'Waiting for approval' AND $5::boolean",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00000000-0000-4000-8000-000000000170",
+              "name": "final_status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000171",
+              "name": "final_reply",
+              "value": "={{ $json.draft_reply }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000172",
+              "name": "handled_by",
+              "value": "AI (автоматично)",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000173",
+              "name": "reason",
+              "value": "={{ $json.status_reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000174",
+      "name": "Auto reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "00000000-0000-4000-8000-000000000175",
+      "name": "Final reply",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=HomeTech поддръжка: {{ $json.ticket_number }}",
+        "emailType": "text",
+        "message": "={{ $json.final_reply }}",
         "options": {
-          "queryReplacement": "={{ [ $json.ticket_number, $json.final_status || 'Waiting for approval', $json.handled_by, $json.reason || null, $json.action !== 'stale' ] }}"
+          "appendAttribution": false
         }
       },
-      "id": "00000000-0000-4000-8000-000000000070",
-      "name": "Save decision",
+      "id": "00000000-0000-4000-8000-000000000176",
+      "name": "Email customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        160
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmailAccountCrd1",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "tickets",
+          "cachedResultName": "tickets"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ticket_number": "={{ $('Final reply').item.json.ticket_number }}",
+            "status": "={{ $('Final reply').item.json.final_status }}",
+            "final_reply": "={{ $('Final reply').item.json.final_reply }}",
+            "handled_by": "={{ $('Final reply').item.json.handled_by }}",
+            "status_reason": "={{ $('Final reply').item.json.reason }}"
+          },
+          "matchingColumns": [
+            "ticket_number"
+          ],
+          "schema": [
+            {
+              "id": "ticket_number",
+              "displayName": "ticket_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "final_reply",
+              "displayName": "final_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handled_by",
+              "displayName": "handled_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status_reason",
+              "displayName": "status_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000177",
+      "name": "Save final reply",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        1540,
-        -260
+        2420,
+        160
       ],
       "credentials": {
         "postgres": {
@@ -403,36 +796,83 @@
       "main": [
         [
           {
-            "node": "Approval result",
+            "node": "Отговор на мениджъра",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Approval result": {
+    "Отговор на мениджъра": {
       "main": [
         [
           {
-            "node": "Approved?",
+            "node": "Какво реши мениджърът?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Approved?": {
+    "Какво реши мениджърът?": {
       "main": [
         [
           {
-            "node": "Final reply",
+            "node": "Нищо не се променя",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
+            "node": "Без отговор",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Одобрено",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Отказано",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Без отговор": {
+      "main": [
+        [
+          {
             "node": "Save decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отказано": {
+      "main": [
+        [
+          {
+            "node": "Save decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Одобрено": {
+      "main": [
+        [
+          {
+            "node": "Final reply",
             "type": "main",
             "index": 0
           }

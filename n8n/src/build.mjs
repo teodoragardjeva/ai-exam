@@ -247,48 +247,179 @@ urgency, statistics and trends of the support desk.
 On topic: such questions in any language, greetings, thanks, and short follow-ups like "and last week?" or "покажи ги".
 Off topic: anything unrelated to the support desk (e.g. write a poem, general knowledge, coding help, other companies).`;
 
-// Heuristic pre-filter for prompt injection (the AI check runs after it).
-const INJECTION_HEURISTICS = String.raw`const patterns = [
-  [/ignore (all |any )?(the )?(previous|prior|above) (instructions|rules|prompts?)/i, "ignore previous instructions"],
-  [/игнорирай(те)? (всички )?(предишни|горни)/i, "игнорирай предишните инструкции"],
-  [/(disregard|forget) (all |your )?(previous |prior )?(instructions|rules)/i, "disregard instructions"],
+// Heuristic pre-filter for prompt injection: an IF node with "matches regex" conditions (OR).
+// The AI check (Input guardrails) runs after it for anything the patterns don't catch.
+const INJECTION_PATTERNS = [
+  String.raw`/ignore (all |any )?(the )?(previous|prior|above) (instructions|rules|prompts?)/i`,
+  String.raw`/игнорирай(те)? (всички )?(предишни|горни)/i`,
+  String.raw`/(disregard|forget) (all |your )?(previous |prior )?(instructions|rules)/i`,
   // "act as" only with a role, so "can the plug act as a timer?" is not flagged.
-  [/(you are now|from now on you are|pretend to be|act as (an? |the )?(ai|assistant|manager|admin|administrator|system|developer|refund))\b/i, "role change"],
-  [/(ти вече си|от сега нататък си|държи се като|представи се за)/i, "смяна на ролята"],
-  [/(system prompt|системн(ия|ият) промпт|developer mode|jailbreak|\bDAN\b)/i, "system prompt / jailbreak"],
-  [/(одобри|approve).{0,40}(връщане|refund).{0,40}(€|eur|лв|\d)/i, "instructs to approve a refund"],
+  String.raw`/(you are now|from now on you are|pretend to be|act as (an? |the )?(ai|assistant|manager|admin|administrator|system|developer|refund))\b/i`,
+  String.raw`/(ти вече си|от сега нататък си|държи се като|представи се за)/i`,
+  String.raw`/(system prompt|системн(ия|ият) промпт|developer mode|jailbreak|\bDAN\b)/i`,
+  String.raw`/(одобри|approve).{0,40}(връщане|refund).{0,40}(€|eur|лв|\d)/i`,
 ];
-const ctx = $input.first().json;
-const hit = patterns.find(([re]) => re.test(ctx.message));
-return [{ json: { ...ctx, heuristic_injection: Boolean(hit), heuristic_reason: hit ? "Heuristic: " + hit[1] : "" } }];`;
 
-// The rules function, copied verbatim from rules.cjs.
-function rulesSource() {
-  const src = readFileSync(here("./rules.cjs"), "utf8");
-  const start = src.indexOf("// BEGIN decide");
-  const end = src.indexOf("// END decide");
-  if (start < 0 || end < 0) throw new Error("rules.cjs: BEGIN/END decide markers missing");
-  return src.slice(start, end + "// END decide".length);
+// ---------- readable node builders (no Code, no hand-written SQL) ----------
+const PUBLIC_SCHEMA = { __rl: true, mode: "list", value: "public", cachedResultName: "public" };
+const table = (name) => ({ __rl: true, mode: "list", value: name, cachedResultName: name });
+
+// Postgres "Select": table + WHERE column = value conditions, as fields in the node.
+const pgSelect = (name, tableName, where, position, extra = {}) =>
+  node(
+    name,
+    base("postgres"),
+    2.6,
+    {
+      operation: "select",
+      schema: PUBLIC_SCHEMA,
+      table: table(tableName),
+      returnAll: extra.returnAll ?? false,
+      limit: 1,
+      where: { values: where.map(([column, value, condition = "equal"]) => ({ column, condition, value })) },
+      combineConditions: "AND",
+      options: {},
+    },
+    position,
+    { credentials: CRED.postgres, ...extra },
+  );
+
+// Column mapping used by Insert / Update ("Map each column manually").
+const columns = (values, matchingColumns = []) => ({
+  mappingMode: "defineBelow",
+  value: values,
+  matchingColumns,
+  schema: Object.keys(values).map((id) => ({
+    id,
+    displayName: id,
+    required: false,
+    defaultMatch: false,
+    display: true,
+    type: "string",
+    canBeUsedToMatch: true,
+  })),
+  attemptToConvertTypes: false,
+  convertFieldsToString: false,
+});
+
+const pgInsert = (name, tableName, values, position, extra = {}) =>
+  node(
+    name,
+    base("postgres"),
+    2.6,
+    { operation: "insert", schema: PUBLIC_SCHEMA, table: table(tableName), columns: columns(values), options: {} },
+    position,
+    { credentials: CRED.postgres, ...extra },
+  );
+
+// Update the row whose `matchColumn` equals values[matchColumn].
+const pgUpdate = (name, tableName, matchColumn, values, position, extra = {}) =>
+  node(
+    name,
+    base("postgres"),
+    2.6,
+    { operation: "update", schema: PUBLIC_SCHEMA, table: table(tableName), columns: columns(values, [matchColumn]), options: {} },
+    position,
+    { credentials: CRED.postgres, ...extra },
+  );
+
+// Edit Fields (Set): named fields. A value's type is taken from the JS value; expressions are
+// strings starting with "=" and need an explicit type: ["name", "={{ ... }}", "number"].
+function setFields(name, fields, position, { keepOthers = false } = {}) {
+  const typeOf = (v) => (typeof v === "boolean" ? "boolean" : typeof v === "number" ? "number" : "string");
+  return node(
+    name,
+    base("set"),
+    3.4,
+    {
+      assignments: {
+        assignments: fields.map(([field, value, type]) => ({ id: uid(), name: field, value, type: type ?? typeOf(value) })),
+      },
+      includeOtherFields: keepOthers,
+      options: {},
+    },
+    position,
+  );
 }
+
+// Edit Fields (Set) in JSON mode: builds the whole item from one expression.
+const setJson = (name, expression, position) =>
+  node(name, base("set"), 3.4, { mode: "raw", jsonOutput: expression, options: {} }, position);
+
+const boolCondition = (leftValue) => ({
+  id: uid(),
+  leftValue,
+  rightValue: true,
+  operator: { type: "boolean", operation: "true", singleValue: true },
+});
+
+// Switch with one named output per rule (first match wins) and a named fallback output.
+const ruleSwitch = (name, rules, fallbackName, position) =>
+  node(
+    name,
+    base("switch"),
+    3.2,
+    {
+      rules: {
+        values: rules.map(([outputKey, leftValue]) => ({
+          conditions: {
+            options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 2 },
+            conditions: [boolCondition(leftValue)],
+            combinator: "and",
+          },
+          renameOutput: true,
+          outputKey,
+        })),
+      },
+      looseTypeValidation: true,
+      options: { fallbackOutput: "extra", renameFallbackOutput: fallbackName },
+    },
+    position,
+  );
+
+const ifAny = (name, conditions, position) =>
+  node(
+    name,
+    base("if"),
+    2.2,
+    {
+      conditions: {
+        options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 2 },
+        conditions,
+        combinator: "or",
+      },
+      looseTypeValidation: true,
+      options: {},
+    },
+    position,
+  );
+
+const stopWithError = (name, errorMessage, position) =>
+  node(name, base("stopAndError"), 1, { errorType: "errorMessage", errorMessage }, position);
+
+const noOp = (name, position) => node(name, base("noOp"), 1, {}, position);
 
 // ---------- WF-1: knowledge base load ----------
 function kbLoad() {
-  const sections = JSON.stringify(handbook.sections, null, 2);
   const nodes = [
     node("Start", base("manualTrigger"), 1, {}, [0, 0]),
     pg(
       "Delete old handbook chunks",
-      `DELETE FROM kb_documents WHERE metadata->>'source' = '${handbook.SOURCE}'`,
-      null,
+      // Filters on a JSON field (metadata.source), which the Delete operation can't express.
+      "DELETE FROM kb_documents WHERE metadata->>'source' = $1",
+      "={{ [ '" + handbook.SOURCE + "' ] }}",
       [220, 0],
       RETRY,
     ),
-    code(
+    setFields(
       "Handbook sections",
-      `// Appendix A, one item per section / FAQ (n8n/src/handbook.cjs). Re-running is safe:\n// the previous step deletes this source first, so there are no duplicates.\nconst sections = ${sections};\nreturn sections.map((s) => ({ json: s }));`,
+      [["sections", "={{ " + JSON.stringify(handbook.sections) + " }}", "array"]],
       [440, 0],
-      { executeOnce: true },
     ),
+    // One item per section / FAQ question of Appendix A.
+    node("One item per section", base("splitOut"), 1.1, { fieldToSplitOut: "sections", include: "noOtherFields", options: {} }, [560, 0], {
+      executeOnce: true,
+    }),
     node(
       "Save to kb_documents",
       lc("vectorStorePGVector"),
@@ -328,7 +459,8 @@ function kbLoad() {
   return workflow(IDS.kbLoad, "WF-1 KB load (handbook → kb_documents)", nodes, [
     ["Start", "Delete old handbook chunks"],
     ["Delete old handbook chunks", "Handbook sections"],
-    ["Handbook sections", "Save to kb_documents"],
+    ["Handbook sections", "One item per section"],
+    ["One item per section", "Save to kb_documents"],
     ["OpenAI embeddings", "Save to kb_documents", "ai_embedding"],
     ["Handbook loader", "Save to kb_documents", "ai_document"],
     ["Text splitter", "Handbook loader", "ai_textSplitter"],
@@ -338,18 +470,29 @@ function kbLoad() {
 // ---------- WF-2: intake & triage ----------
 function intake() {
   const deptNodes = DEPARTMENTS.map(([dept], i) =>
-    node(
-      `Dept: ${dept}`,
-      base("set"),
-      3.4,
-      {
-        assignments: { assignments: [{ id: uid(), name: "department", value: dept, type: "string" }] },
-        includeOtherFields: true,
-        options: {},
-      },
-      [1980, -320 + i * 160],
-    ),
+    setFields(`Dept: ${dept}`, [["department", dept]], [1980, -320 + i * 160], { keepOthers: true }),
   );
+
+  // Order dates in the shop's time zone (Europe/Sofia), from the orders row.
+  const ORDER = "$('Find order (R1)').item.json";
+  const PURCHASE = `DateTime.fromJSDate(new Date(${ORDER}.purchase_date)).setZone('Europe/Sofia').toISODate()`;
+  const TODAY = "$now.setZone('Europe/Sofia').toISODate()";
+  const BASE_URGENCY =
+    "={{ ($json.sentiment && $json.sentiment.category === 'Negative') || $json.ai.refund_requested || $json.ai.defect_reported ? 'Medium' : 'Low' }}";
+
+  // One Set node per business rule: which rule, status, urgency and why.
+  const ruleSet = (rule, status, urgency, reason, i) =>
+    setFields(
+      `Правило ${rule}`,
+      [
+        ["rule_policy", rule],
+        ["rule_status", status],
+        ["urgency", urgency, "string"],
+        ["rule_reason", reason, "string"],
+      ],
+      [3740, -600 + i * 160],
+      { keepOthers: true },
+    );
 
   const nodes = [
     node(
@@ -361,25 +504,28 @@ function intake() {
       { webhookId: "5f8a1c2e-7b3d-4e6f-9a1b-2c3d4e5f6a71", credentials: CRED.botSecret },
     ),
     // R1: the order exists and the email matches (data from the orders table only).
-    pg(
+    pgSelect(
       "Find order (R1)",
-      `SELECT order_number, customer_name, customer_email, product,
-       to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, amount_eur::float8 AS amount_eur,
-       delivery_status, to_char((now() AT TIME ZONE 'Europe/Sofia')::date, 'YYYY-MM-DD') AS today
-FROM orders
-WHERE order_number = upper(trim($1)) AND lower(customer_email) = lower(trim($2))`,
-      "={{ [ $json.body.order_number, $json.body.email ] }}",
+      "orders",
+      [
+        ["order_number", "={{ $json.body.order_number }}"],
+        ["customer_email", "={{ $json.body.email }}"],
+      ],
       [220, 0],
       { alwaysOutputData: true, ...RETRY },
     ),
     ifTrue("Order found?", "={{ Boolean($json.order_number) }}", [440, 0]),
     respond("Respond: order not found", '={{ { "ok": false, "error": "order_mismatch" } }}', [660, 180]),
-    pg(
+    pgInsert(
       "Create ticket",
-      `INSERT INTO tickets (order_number, customer_name, customer_email, message, n8n_execution_id)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING ticket_number`,
-      "={{ [ $json.order_number, $('Webhook').item.json.body.name, $('Webhook').item.json.body.email, $('Webhook').item.json.body.message, $execution.id ] }}",
+      "tickets",
+      {
+        order_number: "={{ $json.order_number }}",
+        customer_name: "={{ $('Webhook').item.json.body.name }}",
+        customer_email: "={{ $('Webhook').item.json.body.email }}",
+        message: "={{ $('Webhook').item.json.body.message }}",
+        n8n_execution_id: "={{ $execution.id }}",
+      },
       [660, -80],
       RETRY,
     ),
@@ -388,50 +534,59 @@ RETURNING ticket_number`,
       '={{ { "ok": true, "ticket_number": $json.ticket_number, "status": "New" } }}',
       [880, -80],
     ),
-    code(
+    setFields(
       "Ticket context",
-      `// Everything the next steps need, in one item. Order data comes from the database.
-const body = $('Webhook').first().json.body;
-const order = $('Find order (R1)').first().json;
-const ticket = $('Create ticket').first().json;
-const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
-return [{ json: {
-  ticket_number: ticket.ticket_number,
-  name: String(body.name),
-  first_name: String(body.name).trim().split(/\\s+/)[0],
-  email: String(body.email),
-  message: String(body.message),
-  order,
-  today: order.today,
-  age_days: Math.round((day(order.today) - day(order.purchase_date)) / 86400000),
-} }];`,
+      [
+        ["ticket_number", "={{ $('Create ticket').item.json.ticket_number }}", "string"],
+        ["name", "={{ $('Webhook').item.json.body.name }}", "string"],
+        ["first_name", "={{ String($('Webhook').item.json.body.name).trim().split(' ')[0] }}", "string"],
+        ["email", "={{ $('Webhook').item.json.body.email }}", "string"],
+        ["message", "={{ $('Webhook').item.json.body.message }}", "string"],
+        ["order", `={{ ${ORDER} }}`, "object"],
+        ["amount", `={{ Number(${ORDER}.amount_eur) }}`, "number"],
+        ["purchase_date", `={{ ${PURCHASE} }}`, "string"],
+        ["today", `={{ ${TODAY} }}`, "string"],
+        ["age_days", `={{ Math.round(DateTime.fromISO(${TODAY}).diff(DateTime.fromISO(${PURCHASE}), 'days').days) }}`, "number"],
+        ["in_warranty", `={{ DateTime.fromISO(${PURCHASE}).plus({ months: 24 }) >= DateTime.fromISO(${TODAY}) }}`, "boolean"],
+      ],
       [1100, -80],
     ),
-    code("Injection heuristics", INJECTION_HEURISTICS, [1320, -80]),
-    ifTrue("Injection suspected?", "={{ $json.heuristic_injection }}", [1540, -80]),
+    ifAny(
+      "Injection suspected?",
+      INJECTION_PATTERNS.map((pattern) => ({
+        id: uid(),
+        leftValue: "={{ $json.message }}",
+        rightValue: pattern,
+        operator: { type: "string", operation: "regex" },
+      })),
+      [1320, -80],
+    ),
     guardrails(
       "Input guardrails",
       "={{ $json.message }}",
       { jailbreak: { value: { threshold: 0.7, customizePrompt: true, prompt: JAILBREAK_PROMPT } } },
-      [1760, 40],
+      [1540, 40],
     ),
-    openAiChat("OpenAI (guard)", [1760, 240]),
-    code("Message passed", "return [{ json: $('Injection heuristics').first().json }];", [1870, 40]),
-    pg(
+    openAiChat("OpenAI (guard)", [1540, 240]),
+    setJson("Message passed", "={{ $('Ticket context').item.json }}", [1760, 40]),
+    pgInsert(
       "Log injection",
-      `INSERT INTO security_log (source_field, original_text, reason, ticket_number)
-VALUES ('message', $1, $2, $3)`,
-      `={{ [ $('Ticket context').item.json.message, $json.heuristic_reason || ('Guardrails: ' + (${TRIPPED} || 'jailbreak')), $('Ticket context').item.json.ticket_number ] }}`,
-      [1980, -540],
+      "security_log",
+      {
+        source_field: "message",
+        original_text: "={{ $('Ticket context').item.json.message }}",
+        reason: `={{ $json.checks ? 'Guardrails: ' + (${TRIPPED} || 'jailbreak') : 'Heuristic: suspicious instruction pattern' }}`,
+        ticket_number: "={{ $('Ticket context').item.json.ticket_number }}",
+      },
+      [1760, -540],
       RETRY,
     ),
-    code(
+    setJson(
       "Injection result",
-      `const ctx = $('Ticket context').first().json;
-return [{ json: { ...ctx, injection: true, department: null, sentiment: null,
-  ai: { summary: "Открит опит за prompt injection; запитването не е обработено от AI.", draft_reply: null,
-        answer_found_in_kb: false, refund_requested: false, defect_reported: false, language: null } } }];`,
-      [2200, -540],
+      `={{ { ...$('Ticket context').item.json, injection: true, department: null, sentiment: null,
+  ai: { summary: 'Открит опит за prompt injection; запитването не е обработено от AI.', draft_reply: null,
+        answer_found_in_kb: false, refund_requested: false, defect_reported: false, language: null } } }}`,
+      [1980, -540],
     ),
     node(
       "Sentiment",
@@ -463,12 +618,12 @@ return [{ json: { ...ctx, injection: true, department: null, sentiment: null,
     ),
     openAiChat("OpenAI (department)", [2200, 240]),
     ...deptNodes,
-    code(
+    setJson(
       "Triage context",
-      `const j = $input.first().json;
-const s = j.sentimentAnalysis || {};
-return [{ json: { ...j, injection: false,
-  sentiment: { category: s.category ?? null, strength: Number(s.strength ?? 0), confidence: Number(s.confidence ?? 0) } } }];`,
+      `={{ { ...$json, injection: false, sentiment: {
+  category: $json.sentimentAnalysis ? $json.sentimentAnalysis.category : null,
+  strength: Number(($json.sentimentAnalysis || {}).strength || 0),
+  confidence: Number(($json.sentimentAnalysis || {}).confidence || 0) } } }}`,
       [2420, 40],
     ),
     node(
@@ -509,107 +664,153 @@ return [{ json: { ...j, injection: false,
       { schemaType: "manual", inputSchema: JSON.stringify(REPLY_SCHEMA, null, 2), autoFix: false },
       [2860, 260],
     ),
-    code(
-      "Validate AI output",
-      `// Stop with a clear error (→ Error Workflow → error_log) if the model's JSON is unusable.
-const ctx = $('Triage context').first().json;
-const ai = $input.first().json.output;
-const problems = [];
-if (!ai || typeof ai !== "object") problems.push("no JSON object");
-else {
-  for (const k of ["summary", "draft_reply", "language"]) if (typeof ai[k] !== "string" || !ai[k].trim()) problems.push(k);
-  for (const k of ["answer_found_in_kb", "refund_requested", "defect_reported"]) if (typeof ai[k] !== "boolean") problems.push(k);
-}
-if (problems.length) throw new Error("AI output is not valid JSON for ticket " + ctx.ticket_number + ": " + problems.join(", "));
-return [{ json: { ...ctx, ai } }];`,
-      [3080, 40],
+    // Is the model's JSON usable? If not: Stop and Error → Error Workflow → error_log.
+    ifTrue(
+      "AI output valid?",
+      `={{ !!$json.output
+  && typeof $json.output.summary === 'string' && $json.output.summary.trim() !== ''
+  && typeof $json.output.draft_reply === 'string' && $json.output.draft_reply.trim() !== ''
+  && typeof $json.output.language === 'string'
+  && typeof $json.output.answer_found_in_kb === 'boolean'
+  && typeof $json.output.refund_requested === 'boolean'
+  && typeof $json.output.defect_reported === 'boolean' }}`,
+      [2860, 40],
     ),
-    guardrails("Output guardrails", "={{ $json.ai.draft_reply }}", OUTPUT_GUARDRAILS, [3080, 260]),
-    openAiChat("OpenAI (output guard)", [3080, 460]),
-    code(
-      "Reply passed",
-      "return [{ json: { ...$('Validate AI output').first().json, output_blocked: false } }];",
-      [3300, 260],
+    stopWithError(
+      "Invalid AI output",
+      "=AI output is not valid JSON for ticket {{ $('Triage context').item.json.ticket_number }}",
+      [3080, 200],
     ),
-    pg(
+    setJson("AI result", "={{ { ...$('Triage context').item.json, ai: $json.output } }}", [3080, 40]),
+    guardrails("Output guardrails", "={{ $json.ai.draft_reply }}", OUTPUT_GUARDRAILS, [3300, 40]),
+    openAiChat("OpenAI (output guard)", [3300, 240]),
+    setJson("Reply passed", "={{ { ...$('AI result').item.json, output_blocked: false } }}", [3520, 40]),
+    pgInsert(
       "Log blocked reply",
-      `INSERT INTO security_log (source_field, original_text, reason, ticket_number)
-VALUES ('draft_reply', $1, $2, $3)`,
-      `={{ [ $('Validate AI output').item.json.ai.draft_reply, 'Output guardrails: ' + (${TRIPPED} || 'failed'), $('Validate AI output').item.json.ticket_number ] }}`,
-      [3300, 460],
+      "security_log",
+      {
+        source_field: "draft_reply",
+        original_text: "={{ $('AI result').item.json.ai.draft_reply }}",
+        reason: `={{ 'Output guardrails: ' + (${TRIPPED} || 'failed') }}`,
+        ticket_number: "={{ $('AI result').item.json.ticket_number }}",
+      },
+      [3520, 240],
       RETRY,
     ),
-    code(
+    // The draft stays in the ticket (staff can edit and send it), but nothing goes out automatically.
+    setJson(
       "Reply blocked",
-      `// The draft stays in the ticket (staff can edit and send it), but nothing goes out automatically.
-const checks = $('Output guardrails').first().json.checks || [];
-const reason = checks.filter((c) => c.triggered).map((c) => c.name).join(", ") || "guardrails";
-return [{ json: { ...$('Validate AI output').first().json, output_blocked: true, output_block_reason: reason } }];`,
-      [3520, 460],
+      `={{ { ...$('AI result').item.json, output_blocked: true,
+  output_block_reason: ($('Output guardrails').item.json.checks || []).filter(c => c.triggered).map(c => c.name).join(', ') || 'guardrails' } }}`,
+      [3740, 240],
     ),
-    code(
-      "Apply business rules",
-      `${rulesSource()}
-
-// Merge the decision into the ticket data. Dates and amounts come from the orders table.
-const all = [];
-for (const item of $input.all()) {
-  const j = item.json;
-  const decision = decide({
-    today: j.today,
-    order: j.order,
-    injection: j.injection,
-    output_blocked: j.output_blocked,
-    output_block_reason: j.output_block_reason,
-    sentiment: j.sentiment,
-    department: j.department,
-    ai: j.ai,
-  });
-  all.push({ json: { ...j, decision } });
-}
-return all;`,
-      [3300, -160],
+    // Business rules R2–R8 (+ injection) in the order of the assignment. Dates and amounts
+    // come from the orders table; the AI only says what the customer wants.
+    ruleSwitch(
+      "Бизнес правила",
+      [
+        ["Injection", "={{ $json.injection === true }}"],
+        ["R6", "={{ !!$json.sentiment && $json.sentiment.category === 'Negative' && $json.sentiment.strength >= 0.8 && $json.sentiment.confidence >= 0.8 }}"],
+        ["R2", "={{ $json.ai.refund_requested && $json.age_days <= 30 && $json.amount <= 100 }}"],
+        ["R3", "={{ $json.ai.refund_requested && $json.age_days <= 30 }}"],
+        ["R4", "={{ $json.ai.defect_reported && $json.age_days > 30 && $json.in_warranty }}"],
+        ["R5", "={{ $json.ai.defect_reported && $json.age_days > 30 }}"],
+        ["R7", "={{ ['Technical support', 'Shipping & delivery'].includes($json.department) && $json.ai.answer_found_in_kb }}"],
+      ],
+      "R8",
+      [3520, -300],
     ),
-    pg(
+    ruleSet("INJECTION", "Manual review", "Medium", "Открит опит за prompt injection: не се обработва автоматично", 0),
+    ruleSet(
+      "R6",
+      "Waiting for approval",
+      "High",
+      "=Негативно настроение (сила {{ Number($json.sentiment.strength).toFixed(2) }}, увереност {{ Number($json.sentiment.confidence).toFixed(2) }} ≥ 0.8): без автоматичен отговор",
+      1,
+    ),
+    ruleSet("R2", "Auto-answered", BASE_URGENCY, "=Връщане {{ $json.age_days }} дни след покупка, сума €{{ $json.amount.toFixed(2) }} ≤ €100: одобрено автоматично", 2),
+    ruleSet("R3", "Waiting for approval", BASE_URGENCY, "=Връщане {{ $json.age_days }} дни след покупка, сума €{{ $json.amount.toFixed(2) }} > €100: нужно одобрение", 3),
+    ruleSet("R4", "Waiting for approval", BASE_URGENCY, "=Дефект {{ $json.age_days }} дни след покупка, в рамките на 24-месечната гаранция: нужно одобрение", 4),
+    ruleSet("R5", "Rejected", BASE_URGENCY, "=Дефект след изтичане на 24-месечната гаранция ({{ $json.age_days }} дни): платен ремонт", 5),
+    ruleSet(
+      "R7",
+      "Auto-answered",
+      BASE_URGENCY,
+      "={{ $json.department === 'Technical support' ? 'Технически въпрос' : 'Въпрос за доставка' }}: отговорът е намерен в наръчника",
+      6,
+    ),
+    ruleSet(
+      "R8",
+      "Manual review",
+      BASE_URGENCY,
+      "={{ $json.ai.answer_found_in_kb ? 'Не попада в автоматичните правила: ръчен преглед' : 'Отговорът не е в наръчника: ръчен преглед' }}",
+      7,
+    ),
+    // Output guardrails: a flagged draft is never sent automatically (an auto-reply becomes
+    // GUARDRAIL / Manual review); where a human approves anyway, the reason warns them.
+    setFields(
+      "Решение",
+      [
+        ["policy_rule", "={{ $json.output_blocked && ['Auto-answered', 'Rejected'].includes($json.rule_status) ? 'GUARDRAIL' : $json.rule_policy }}", "string"],
+        ["status", "={{ $json.output_blocked && ['Auto-answered', 'Rejected'].includes($json.rule_status) ? 'Manual review' : $json.rule_status }}", "string"],
+        [
+          "status_reason",
+          `={{ !$json.output_blocked ? $json.rule_reason
+  : ['Auto-answered', 'Rejected'].includes($json.rule_status)
+    ? 'Guardrails спряха AI отговора (' + ($json.output_block_reason || 'guardrails') + ') при правило ' + $json.rule_policy + ': не се изпраща автоматично, ръчен преглед'
+    : $json.rule_reason + ' · Guardrails маркираха черновата (' + ($json.output_block_reason || 'guardrails') + '): прегледайте я' }}`,
+          "string",
+        ],
+      ],
+      [3960, -300],
+      { keepOthers: true },
+    ),
+    pgUpdate(
       "Save triage",
-      `UPDATE tickets SET
-  language = $2, department = $3, sentiment = $4, sentiment_score = $5, sentiment_confidence = $6,
-  urgency = $7, ai_summary = $8, ai_draft_reply = $9, answer_found_in_kb = $10,
-  refund_requested = $11, refund_amount = $12, policy_rule = $13, status = $14, status_reason = $15
-WHERE ticket_number = $1`,
-      `={{ [
-  $json.ticket_number,
-  $json.ai.language,
-  $json.department,
-  $json.sentiment ? $json.sentiment.category : null,
-  $json.sentiment ? $json.sentiment.strength : null,
-  $json.sentiment ? $json.sentiment.confidence : null,
-  $json.decision.urgency,
-  $json.ai.summary,
-  $json.ai.draft_reply,
-  $json.ai.answer_found_in_kb,
-  $json.ai.refund_requested,
-  $json.ai.refund_requested ? $json.order.amount_eur : null,
-  $json.decision.policy_rule,
-  $json.decision.status,
-  $json.decision.status_reason
-] }}`,
-      [3520, -160],
+      "tickets",
+      "ticket_number",
+      {
+        ticket_number: "={{ $json.ticket_number }}",
+        language: "={{ $json.ai.language }}",
+        department: "={{ $json.department }}",
+        sentiment: "={{ $json.sentiment ? $json.sentiment.category : null }}",
+        sentiment_score: "={{ $json.sentiment ? $json.sentiment.strength : null }}",
+        sentiment_confidence: "={{ $json.sentiment ? $json.sentiment.confidence : null }}",
+        urgency: "={{ $json.urgency }}",
+        ai_summary: "={{ $json.ai.summary }}",
+        ai_draft_reply: "={{ $json.ai.draft_reply }}",
+        answer_found_in_kb: "={{ $json.ai.answer_found_in_kb }}",
+        refund_requested: "={{ $json.ai.refund_requested }}",
+        refund_amount: "={{ $json.ai.refund_requested ? $json.amount : null }}",
+        policy_rule: "={{ $json.policy_rule }}",
+        status: "={{ $json.status }}",
+        status_reason: "={{ $json.status_reason }}",
+      },
+      [4180, -300],
       RETRY,
     ),
-    code(
+    setFields(
       "Reply payload",
-      `const j = $('Apply business rules').first().json;
-return [{ json: {
-  ticket_number: j.ticket_number, name: j.name, first_name: j.first_name, email: j.email,
-  language: j.ai.language, draft_reply: j.ai.draft_reply, summary: j.ai.summary,
-  status: j.decision.status, policy_rule: j.decision.policy_rule, status_reason: j.decision.status_reason,
-  send_reply: j.decision.send_reply, needs_approval: j.decision.needs_approval,
-  order_number: j.order.order_number, product: j.order.product, amount_eur: j.order.amount_eur,
-} }];`,
-      [3740, -160],
+      [
+        ["ticket_number", "={{ $('Решение').item.json.ticket_number }}", "string"],
+        ["name", "={{ $('Решение').item.json.name }}", "string"],
+        ["first_name", "={{ $('Решение').item.json.first_name }}", "string"],
+        ["email", "={{ $('Решение').item.json.email }}", "string"],
+        ["language", "={{ $('Решение').item.json.ai.language }}", "string"],
+        ["draft_reply", "={{ $('Решение').item.json.ai.draft_reply }}", "string"],
+        ["summary", "={{ $('Решение').item.json.ai.summary }}", "string"],
+        ["status", "={{ $('Решение').item.json.status }}", "string"],
+        ["policy_rule", "={{ $('Решение').item.json.policy_rule }}", "string"],
+        ["status_reason", "={{ $('Решение').item.json.status_reason }}", "string"],
+        ["send_reply", "={{ ['Auto-answered', 'Rejected'].includes($('Решение').item.json.status) }}", "boolean"],
+        ["needs_approval", "={{ $('Решение').item.json.status === 'Waiting for approval' }}", "boolean"],
+        ["order_number", "={{ $('Решение').item.json.order.order_number }}", "string"],
+        ["product", "={{ $('Решение').item.json.order.product }}", "string"],
+        ["amount_eur", "={{ $('Решение').item.json.amount }}", "number"],
+      ],
+      [4400, -300],
     ),
-    ifTrue("Reply or approval needed?", "={{ $json.send_reply || $json.needs_approval }}", [3960, -160]),
+    ifTrue("Reply or approval needed?", "={{ $json.send_reply || $json.needs_approval }}", [4620, -300]),
     node(
       "WF-3 Approval & reply",
       base("executeWorkflow"),
@@ -621,10 +822,11 @@ return [{ json: {
         mode: "each",
         options: { waitForSubWorkflow: false },
       },
-      [4180, -240],
+      [4840, -380],
     ),
   ];
 
+  const RULES = ["INJECTION", "R6", "R2", "R3", "R4", "R5", "R7", "R8"];
   const links = [
     ["Webhook", "Find order (R1)"],
     ["Find order (R1)", "Order found?"],
@@ -632,8 +834,7 @@ return [{ json: {
     ["Order found?", "Respond: order not found", "main", 1],
     ["Create ticket", "Respond: ticket created"],
     ["Respond: ticket created", "Ticket context"],
-    ["Ticket context", "Injection heuristics"],
-    ["Injection heuristics", "Injection suspected?"],
+    ["Ticket context", "Injection suspected?"],
     ["Injection suspected?", "Log injection", "main", 0],
     ["Injection suspected?", "Input guardrails", "main", 1],
     ["OpenAI (guard)", "Input guardrails", "ai_languageModel"],
@@ -641,7 +842,7 @@ return [{ json: {
     ["Input guardrails", "Log injection", "main", 1],
     ["Message passed", "Sentiment"],
     ["Log injection", "Injection result"],
-    ["Injection result", "Apply business rules"],
+    ["Injection result", "Бизнес правила"],
     ["OpenAI (sentiment)", "Sentiment", "ai_languageModel"],
     ["Sentiment", "Department", "main", 0],
     ["Sentiment", "Department", "main", 1],
@@ -656,15 +857,19 @@ return [{ json: {
     ["handbook_search", "Support agent (RAG)", "ai_tool"],
     ["OpenAI embeddings (search)", "handbook_search", "ai_embedding"],
     ["Reply JSON", "Support agent (RAG)", "ai_outputParser"],
-    ["Support agent (RAG)", "Validate AI output"],
-    ["Validate AI output", "Output guardrails"],
+    ["Support agent (RAG)", "AI output valid?"],
+    ["AI output valid?", "AI result", "main", 0],
+    ["AI output valid?", "Invalid AI output", "main", 1],
+    ["AI result", "Output guardrails"],
     ["OpenAI (output guard)", "Output guardrails", "ai_languageModel"],
     ["Output guardrails", "Reply passed", "main", 0],
     ["Output guardrails", "Log blocked reply", "main", 1],
     ["Log blocked reply", "Reply blocked"],
-    ["Reply passed", "Apply business rules"],
-    ["Reply blocked", "Apply business rules"],
-    ["Apply business rules", "Save triage"],
+    ["Reply passed", "Бизнес правила"],
+    ["Reply blocked", "Бизнес правила"],
+    ...RULES.map((rule, i) => ["Бизнес правила", `Правило ${rule}`, "main", i]),
+    ...RULES.map((rule) => [`Правило ${rule}`, "Решение"]),
+    ["Решение", "Save triage"],
     ["Save triage", "Reply payload"],
     ["Reply payload", "Reply or approval needed?"],
     ["Reply or approval needed?", "WF-3 Approval & reply", "main", 0],
@@ -674,19 +879,11 @@ return [{ json: {
 
 // ---------- WF-3: human approval & reply email ----------
 function approval() {
+  const ANSWER = "($('Ask manager (Send and Wait)').item.json.data || $('Ask manager (Send and Wait)').item.json)";
   const nodes = [
     node("From WF-2", base("executeWorkflowTrigger"), 1.1, { inputSource: "passthrough" }, [0, 0]),
-    pg("Manager email", `SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'`, null, [220, 0], {
-      alwaysOutputData: true,
-      ...RETRY,
-    }),
-    code(
-      "Ticket",
-      `const t = $('From WF-2').first().json;
-const manager = $input.first().json.manager_email || null;
-return [{ json: { ...t, manager_email: manager } }];`,
-      [440, 0],
-    ),
+    pgSelect("Manager email", "app_settings", [["key", "manager_email"]], [220, 0], { alwaysOutputData: true, ...RETRY }),
+    setJson("Ticket", "={{ { ...$('From WF-2').item.json, manager_email: $json.value || null } }}", [440, 0]),
     ifTrue("Needs approval?", "={{ $json.needs_approval }}", [660, 0]),
     node(
       "Ask manager (Send and Wait)",
@@ -721,66 +918,92 @@ AI чернова на отговор:
         },
         options: { appendAttribution: false, limitWaitTime: { values: { limitType: "afterTimeInterval", resumeAmount: 3, resumeUnit: "days" } } },
       },
-      [880, -120],
+      [880, -160],
       { credentials: CRED.gmail, webhookId: "6a9b2d3f-8c4e-4f70-ab2c-3d4e5f6a7b82", ...RETRY },
     ),
-    // The answer may come days later: re-read the ticket so a late click never overwrites a
-    // ticket that staff already answered from the dashboard (WF-4) or closed.
-    pg(
-      "Current status",
-      `SELECT status FROM tickets WHERE ticket_number = $1`,
-      "={{ [ $('Ticket').item.json.ticket_number ] }}",
-      [990, -120],
-      { alwaysOutputData: true, ...RETRY },
+    // The answer may come days later: read the ticket's current status first.
+    pgSelect("Current status", "tickets", [["ticket_number", "={{ $('Ticket').item.json.ticket_number }}"]], [1100, -160], {
+      alwaysOutputData: true,
+      ...RETRY,
+    }),
+    setJson(
+      "Отговор на мениджъра",
+      `={{ { ...$('Ticket').item.json, current_status: $json.status,
+  decision: String(${ANSWER}['Решение'] || '').trim(),
+  edited_reply: String(${ANSWER}['Отговор към клиента'] || '').trim(),
+  comment: String(${ANSWER}['Коментар'] || '').trim() } }}`,
+      [1320, -160],
     ),
-    code(
-      "Approval result",
-      `const t = $('Ticket').first().json;
-const answer = $('Ask manager (Send and Wait)').first().json;
-const data = answer.data || answer;
-const pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];
-const decision = String(pick("Решение") ?? "").trim();
-const edited = String(pick("Отговор към клиента") ?? "").trim();
-const comment = String(pick("Коментар") ?? "").trim();
-const current = $input.first().json.status;
-const handledBy = (t.manager_email || "manager") + " (Gmail)";
-
-// stale: already handled elsewhere → do nothing. timeout: no answer within the wait limit →
-// back to manual review, never an automatic rejection.
-let action;
-if (current !== "Waiting for approval") action = "stale";
-else if (!decision) action = "timeout";
-else action = decision.startsWith("Одобри") ? "approved" : "rejected";
-
-const out = { ...t, action, approved: action === "approved", handled_by: handledBy };
-if (action === "approved") {
-  out.final_status = "Approved & sent";
-  out.final_reply = edited || t.draft_reply;
-  out.reason = comment ? "Мениджър: " + comment : "Одобрено от мениджъра";
-} else if (action === "rejected") {
-  out.final_status = "Rejected";
-  out.reason = comment ? "Мениджър: " + comment : "Отказано от мениджъра";
-} else if (action === "timeout") {
-  out.final_status = "Manual review";
-  out.handled_by = null;
-  out.reason = "Няма отговор от мениджъра в срок: нужен е ръчен преглед";
-}
-return [{ json: out }];`,
-      [1100, -120],
+    ruleSwitch(
+      "Какво реши мениджърът?",
+      [
+        // Staff already answered from the dashboard (WF-4) or closed it: a late click does nothing.
+        ["Вече обработено", "={{ $json.current_status !== 'Waiting for approval' }}"],
+        // No answer within the wait limit: back to manual review, never an automatic rejection.
+        ["Няма отговор", "={{ !$json.decision }}"],
+        ["Одобрено", "={{ $json.decision.startsWith('Одобри') }}"],
+      ],
+      "Отказано",
+      [1540, -160],
     ),
-    ifTrue("Approved?", "={{ $json.approved }}", [1320, -120]),
-    code(
+    noOp("Нищо не се променя", [1760, -400]),
+    setFields(
+      "Без отговор",
+      [
+        ["final_status", "Manual review"],
+        ["handled_by", "={{ null }}", "string"],
+        ["reason", "Няма отговор от мениджъра в срок: нужен е ръчен преглед"],
+      ],
+      [1760, -260],
+      { keepOthers: true },
+    ),
+    setFields(
+      "Одобрено",
+      [
+        ["final_status", "Approved & sent"],
+        ["final_reply", "={{ $json.edited_reply || $json.draft_reply }}", "string"],
+        ["handled_by", "={{ ($json.manager_email || 'manager') + ' (Gmail)' }}", "string"],
+        ["reason", "={{ $json.comment ? 'Мениджър: ' + $json.comment : 'Одобрено от мениджъра' }}", "string"],
+      ],
+      [1760, -120],
+      { keepOthers: true },
+    ),
+    setFields(
+      "Отказано",
+      [
+        ["final_status", "Rejected"],
+        ["handled_by", "={{ ($json.manager_email || 'manager') + ' (Gmail)' }}", "string"],
+        ["reason", "={{ $json.comment ? 'Мениджър: ' + $json.comment : 'Отказано от мениджъра' }}", "string"],
+      ],
+      [1760, 20],
+      { keepOthers: true },
+    ),
+    pgUpdate(
+      "Save decision",
+      "tickets",
+      "ticket_number",
+      {
+        ticket_number: "={{ $json.ticket_number }}",
+        status: "={{ $json.final_status }}",
+        handled_by: "={{ $json.handled_by }}",
+        status_reason: "={{ $json.reason }}",
+      },
+      [1980, -160],
+      RETRY,
+    ),
+    setFields(
       "Auto reply",
-      `const t = $input.first().json;
-return [{ json: { ...t, final_status: t.status, final_reply: t.draft_reply, handled_by: "AI (автоматично)", reason: null } }];`,
-      [880, 140],
+      [
+        ["final_status", "={{ $json.status }}", "string"],
+        ["final_reply", "={{ $json.draft_reply }}", "string"],
+        ["handled_by", "AI (автоматично)"],
+        ["reason", "={{ $json.status_reason }}", "string"],
+      ],
+      [880, 160],
+      { keepOthers: true },
     ),
-    code(
-      "Final reply",
-      `// Both paths (approved by the manager, or answered automatically) meet here.
-return $input.all().map((i) => ({ json: i.json }));`,
-      [1320, 140],
-    ),
+    // Both paths (approved by the manager, or answered automatically) meet here.
+    noOp("Final reply", [1980, 160]),
     node(
       "Email customer",
       base("gmail"),
@@ -792,24 +1015,21 @@ return $input.all().map((i) => ({ json: i.json }));`,
         message: "={{ $json.final_reply }}",
         options: { appendAttribution: false },
       },
-      [1540, 0],
+      [2200, 160],
       { credentials: CRED.gmail, ...RETRY },
     ),
-    pg(
+    pgUpdate(
       "Save final reply",
-      `UPDATE tickets SET status = $2, final_reply = $3, handled_by = $4, status_reason = coalesce($5, status_reason)
-WHERE ticket_number = $1`,
-      "={{ [ $('Final reply').item.json.ticket_number, $('Final reply').item.json.final_status, $('Final reply').item.json.final_reply, $('Final reply').item.json.handled_by, $('Final reply').item.json.reason ] }}",
-      [1760, 0],
-      RETRY,
-    ),
-    // Rejected or timed out; a stale answer (ticket already handled) changes nothing.
-    pg(
-      "Save decision",
-      `UPDATE tickets SET status = $2, handled_by = coalesce($3, handled_by), status_reason = $4
-WHERE ticket_number = $1 AND status = 'Waiting for approval' AND $5::boolean`,
-      "={{ [ $json.ticket_number, $json.final_status || 'Waiting for approval', $json.handled_by, $json.reason || null, $json.action !== 'stale' ] }}",
-      [1540, -260],
+      "tickets",
+      "ticket_number",
+      {
+        ticket_number: "={{ $('Final reply').item.json.ticket_number }}",
+        status: "={{ $('Final reply').item.json.final_status }}",
+        final_reply: "={{ $('Final reply').item.json.final_reply }}",
+        handled_by: "={{ $('Final reply').item.json.handled_by }}",
+        status_reason: "={{ $('Final reply').item.json.reason }}",
+      },
+      [2420, 160],
       RETRY,
     ),
   ];
@@ -820,10 +1040,15 @@ WHERE ticket_number = $1 AND status = 'Waiting for approval' AND $5::boolean`,
     ["Needs approval?", "Ask manager (Send and Wait)", "main", 0],
     ["Needs approval?", "Auto reply", "main", 1],
     ["Ask manager (Send and Wait)", "Current status"],
-    ["Current status", "Approval result"],
-    ["Approval result", "Approved?"],
-    ["Approved?", "Final reply", "main", 0],
-    ["Approved?", "Save decision", "main", 1],
+    ["Current status", "Отговор на мениджъра"],
+    ["Отговор на мениджъра", "Какво реши мениджърът?"],
+    ["Какво реши мениджърът?", "Нищо не се променя", "main", 0],
+    ["Какво реши мениджърът?", "Без отговор", "main", 1],
+    ["Какво реши мениджърът?", "Одобрено", "main", 2],
+    ["Какво реши мениджърът?", "Отказано", "main", 3],
+    ["Без отговор", "Save decision"],
+    ["Отказано", "Save decision"],
+    ["Одобрено", "Final reply"],
     ["Auto reply", "Final reply"],
     ["Final reply", "Email customer"],
     ["Email customer", "Save final reply"],
@@ -841,13 +1066,10 @@ function sendReply() {
       [0, 0],
       { webhookId: "7b0c3e4a-9d5f-4a81-bc3d-4e5f6a7b8c93", credentials: CRED.botSecret },
     ),
-    pg(
-      "Load ticket",
-      `SELECT ticket_number, customer_name, customer_email FROM tickets WHERE ticket_number = upper(trim($1))`,
-      "={{ [ $json.body.ticket_number ] }}",
-      [220, 0],
-      { alwaysOutputData: true, ...RETRY },
-    ),
+    pgSelect("Load ticket", "tickets", [["ticket_number", "={{ String($json.body.ticket_number).trim().toUpperCase() }}"]], [220, 0], {
+      alwaysOutputData: true,
+      ...RETRY,
+    }),
     ifTrue("Ticket found?", "={{ Boolean($json.ticket_number) }}", [440, 0]),
     respond("Respond: not found", '={{ { "ok": false, "error": "not_found" } }}', [660, 180]),
     node(
@@ -864,12 +1086,17 @@ function sendReply() {
       [660, -80],
       { credentials: CRED.gmail, ...RETRY },
     ),
-    pg(
+    pgUpdate(
       "Save sent reply",
-      `UPDATE tickets SET status = 'Approved & sent', final_reply = $2, handled_by = $3,
-  status_reason = 'Редактирано и изпратено от таблото'
-WHERE ticket_number = $1`,
-      "={{ [ $('Load ticket').item.json.ticket_number, $('Webhook').item.json.body.reply, $('Webhook').item.json.body.staff_email + ' (табло)' ] }}",
+      "tickets",
+      "ticket_number",
+      {
+        ticket_number: "={{ $('Load ticket').item.json.ticket_number }}",
+        status: "Approved & sent",
+        final_reply: "={{ $('Webhook').item.json.body.reply }}",
+        handled_by: "={{ $('Webhook').item.json.body.staff_email + ' (табло)' }}",
+        status_reason: "Редактирано и изпратено от таблото",
+      },
       [880, -80],
       RETRY,
     ),
@@ -947,11 +1174,14 @@ function assistant() {
       [220, -200],
     ),
     openAiChat("OpenAI (guard)", [220, -400]),
-    pg(
+    pgInsert(
       "Log blocked question",
-      `INSERT INTO security_log (source_field, original_text, reason, ticket_number)
-VALUES ('assistant', $1, $2, NULL)`,
-      `={{ [ $('Webhook').item.json.body.message, 'Assistant guardrails: ' + (${TRIPPED} || 'failed') ] }}`,
+      "security_log",
+      {
+        source_field: "assistant",
+        original_text: "={{ $('Webhook').item.json.body.message }}",
+        reason: `={{ 'Assistant guardrails: ' + (${TRIPPED} || 'failed') }}`,
+      },
       [440, -400],
       RETRY,
     ),
@@ -1036,20 +1266,15 @@ function dailyReport() {
       [0, 0],
     ),
     node("Run now", base("manualTrigger"), 1, {}, [0, 200]),
-    pg(
+    pgSelect(
       "Yesterday's tickets",
-      `SELECT ticket_number,
-       to_char(created_at AT TIME ZONE 'Europe/Sofia', 'HH24:MI') AS time,
-       to_char((now() AT TIME ZONE 'Europe/Sofia')::date - 1, 'DD.MM.YYYY') AS day,
-       department, urgency, status, policy_rule, refund_requested, refund_amount::float8 AS refund_amount,
-       coalesce(ai_summary, left(message, 200)) AS summary
-FROM tickets
-WHERE created_at >= ((now() AT TIME ZONE 'Europe/Sofia')::date - 1)::timestamp AT TIME ZONE 'Europe/Sofia'
-  AND created_at <  ((now() AT TIME ZONE 'Europe/Sofia')::date)::timestamp AT TIME ZONE 'Europe/Sofia'
-ORDER BY created_at`,
-      null,
+      "tickets",
+      [
+        ["created_at", "={{ $now.setZone('Europe/Sofia').startOf('day').minus({ days: 1 }).toISO() }}", ">="],
+        ["created_at", "={{ $now.setZone('Europe/Sofia').startOf('day').toISO() }}", "<"],
+      ],
       [240, 100],
-      { alwaysOutputData: true, ...RETRY },
+      { alwaysOutputData: true, returnAll: true, ...RETRY },
     ),
     code(
       "Report data",
@@ -1078,7 +1303,7 @@ const stats = [
   "Чакат решение: " + (waiting.length ? waiting.map((r) => r.ticket_number).join(", ") : "няма"),
 ].join("\\n\\n");
 const text = rows.length
-  ? rows.map((r) => [r.ticket_number, r.time, DEPT[r.department] ?? "—", URG[r.urgency] ?? "—", STATUS[r.status] ?? r.status, r.summary].join(" | ")).join("\\n")
+  ? rows.map((r) => [r.ticket_number, new Date(r.created_at).toLocaleTimeString("bg-BG", { timeZone: "Europe/Sofia", hour: "2-digit", minute: "2-digit" }), DEPT[r.department] ?? "—", URG[r.urgency] ?? "—", STATUS[r.status] ?? r.status, r.ai_summary || String(r.message || "").slice(0, 200)].join(" | ")).join("\\n")
   : "Вчера няма запитвания.";
 return [{ json: { day: yesterday, count: rows.length, stats, text } }];`,
       // No executeOnce here: it would pass only the first ticket to the node.
@@ -1099,18 +1324,19 @@ return [{ json: { day: yesterday, count: rows.length, stats, text } }];`,
       RETRY,
     ),
     openAiChat("OpenAI (report)", [720, 320]),
-    code(
+    setFields(
       "Email body",
-      `const data = $('Report data').first().json;
-const out = $input.first().json;
-const summary = String(out.response?.text ?? out.output?.text ?? out.text ?? out.output ?? "").trim();
-return [{ json: { ...data,
-  subject: "HomeTech: дневен отчет за " + data.day + " (" + data.count + " запитвания)",
-  body: "Дневен отчет за поддръжката\\n\\n" + data.stats + "\\n\\nОбобщение:\\n" + (summary || "—") + "\\n\\nТаблото: https://ai-exam.robodigit.win/staff",
-} }];`,
+      [
+        ["subject", "=HomeTech: дневен отчет за {{ $('Report data').item.json.day }} ({{ $('Report data').item.json.count }} запитвания)", "string"],
+        [
+          "body",
+          "=Дневен отчет за поддръжката\n\n{{ $('Report data').item.json.stats }}\n\nОбобщение:\n{{ ($json.response && $json.response.text) || ($json.output && $json.output.text) || $json.text || '—' }}\n\nТаблото: https://ai-exam.robodigit.win/staff",
+          "string",
+        ],
+      ],
       [960, 100],
     ),
-    pg("Manager email", `SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'`, null, [1200, 100], {
+    pgSelect("Manager email", "app_settings", [["key", "manager_email"]], [1200, 100], {
       alwaysOutputData: true,
       ...RETRY,
     }),
@@ -1119,7 +1345,7 @@ return [{ json: { ...data,
       base("gmail"),
       2.1,
       {
-        sendTo: "={{ $json.manager_email }}",
+        sendTo: "={{ $json.value }}",
         subject: "={{ $('Email body').item.json.subject }}",
         emailType: "text",
         message: "={{ $('Email body').item.json.body }}",
@@ -1147,10 +1373,15 @@ return [{ json: { ...data,
 function errors() {
   const nodes = [
     node("Error Trigger", base("errorTrigger"), 1, {}, [0, 0]),
-    pg(
+    pgInsert(
       "Write error_log",
-      `INSERT INTO error_log (workflow, node, message, execution_url) VALUES ($1, $2, $3, $4)`,
-      "={{ [ $json.workflow.name, $json.execution.lastNodeExecuted || ($json.execution.error && $json.execution.error.node && $json.execution.error.node.name) || null, ($json.execution.error && $json.execution.error.message) || 'Unknown error', $json.execution.url || null ] }}",
+      "error_log",
+      {
+        workflow: "={{ $json.workflow.name }}",
+        node: "={{ $json.execution.lastNodeExecuted || ($json.execution.error && $json.execution.error.node && $json.execution.error.node.name) || null }}",
+        message: "={{ ($json.execution.error && $json.execution.error.message) || 'Unknown error' }}",
+        execution_url: "={{ $json.execution.url || null }}",
+      },
       [220, 0],
       { ...RETRY, continueOnFail: true },
     ),
@@ -1164,7 +1395,7 @@ WHERE n8n_execution_id = $1 AND status = 'New'`,
       [440, 0],
       { ...RETRY, continueOnFail: true, alwaysOutputData: true },
     ),
-    pg("Manager email", `SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'`, null, [660, 0], {
+    pgSelect("Manager email", "app_settings", [["key", "manager_email"]], [660, 0], {
       alwaysOutputData: true,
     }),
     node(
@@ -1172,7 +1403,7 @@ WHERE n8n_execution_id = $1 AND status = 'New'`,
       base("gmail"),
       2.1,
       {
-        sendTo: "={{ $json.manager_email }}",
+        sendTo: "={{ $json.value }}",
         subject: "=⚠ n8n грешка: {{ $('Error Trigger').item.json.workflow.name }}",
         emailType: "text",
         message:

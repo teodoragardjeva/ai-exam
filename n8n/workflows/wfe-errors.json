@@ -4,7 +4,7 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "00000000-0000-4000-8000-000000000098",
+      "id": "00000000-0000-4000-8000-000000000207",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
@@ -15,13 +15,72 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO error_log (workflow, node, message, execution_url) VALUES ($1, $2, $3, $4)",
-        "options": {
-          "queryReplacement": "={{ [ $json.workflow.name, $json.execution.lastNodeExecuted || ($json.execution.error && $json.execution.error.node && $json.execution.error.node.name) || null, ($json.execution.error && $json.execution.error.message) || 'Unknown error', $json.execution.url || null ] }}"
-        }
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "error_log",
+          "cachedResultName": "error_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow": "={{ $json.workflow.name }}",
+            "node": "={{ $json.execution.lastNodeExecuted || ($json.execution.error && $json.execution.error.node && $json.execution.error.node.name) || null }}",
+            "message": "={{ ($json.execution.error && $json.execution.error.message) || 'Unknown error' }}",
+            "execution_url": "={{ $json.execution.url || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "workflow",
+              "displayName": "workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "node",
+              "displayName": "node",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_url",
+              "displayName": "execution_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000099",
+      "id": "00000000-0000-4000-8000-000000000208",
       "name": "Write error_log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -48,7 +107,7 @@
           "queryReplacement": "={{ [ String($('Error Trigger').item.json.execution.id), ($('Error Trigger').item.json.execution.error && $('Error Trigger').item.json.execution.error.message) || 'неизвестна грешка' ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000100",
+      "id": "00000000-0000-4000-8000-000000000209",
       "name": "Ticket to manual review",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -70,11 +129,34 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'",
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "app_settings",
+          "cachedResultName": "app_settings"
+        },
+        "returnAll": false,
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "key",
+              "condition": "equal",
+              "value": "manager_email"
+            }
+          ]
+        },
+        "combineConditions": "AND",
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000101",
+      "id": "00000000-0000-4000-8000-000000000210",
       "name": "Manager email",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -92,7 +174,7 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $json.manager_email }}",
+        "sendTo": "={{ $json.value }}",
         "subject": "=⚠ n8n грешка: {{ $('Error Trigger').item.json.workflow.name }}",
         "emailType": "text",
         "message": "=Workflow: {{ $('Error Trigger').item.json.workflow.name }}\nНод: {{ $('Error Trigger').item.json.execution.lastNodeExecuted }}\nГрешка: {{ $('Error Trigger').item.json.execution.error.message }}\nИзпълнение: {{ $('Error Trigger').item.json.execution.url }}",
@@ -100,7 +182,7 @@
           "appendAttribution": false
         }
       },
-      "id": "00000000-0000-4000-8000-000000000102",
+      "id": "00000000-0000-4000-8000-000000000211",
       "name": "Notify manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
