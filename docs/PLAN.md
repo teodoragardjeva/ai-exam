@@ -6,9 +6,9 @@
 
 | Тема | Решение |
 |---|---|
-| Хостинг | Нов droplet във Frankfurt, създаден с cloud-init (потребител `deploy`, без root и парола, автоматични security обновления) |
+| Хостинг | **Съществуващият droplet** във Frankfurt (вече има Docker, Portainer, NPM, Cloudflare, CI). Довършваме hardening-а на място: потребител `deploy`, забранени root и пароли, `unattended-upgrades`. `deploy/cloud-init.yml` в репото описва как би се създал наново; в README пишем, че този droplet не е създаден с него |
 | Контейнери | Един compose файл: `app`, `db` (Postgres 17 + pgvector), `n8n`, NPM, Portainer. Публикуват портове само NPM (80/443) и Portainer (9443, само от твоето IP). NPM админ (81) е вързан към `127.0.0.1`, достъп през SSH тунел |
-| Домейни | `app.robodigit.win` → app, `n8n.robodigit.win` → n8n (Let's Encrypt през NPM, Cloudflare DNS) |
+| Домейни | `ai-exam.robodigit.win` → app (вече работи), **`n8n.robodigit.win`** → n8n (нов DNS запис + proxy host; нужен е за линковете на формата за одобрение). Let's Encrypt през NPM |
 | n8n отвън | Публични са само `/form-waiting/` и `/webhook-waiting/` (формите за одобрение). Редакторът и `/webhook/` са само за твоето IP (NPM Access List). App вика n8n вътрешно: `http://n8n:5678/webhook/...` |
 | AI | OpenAI: чат модел за триажа и агента, `text-embedding-3-small` (1536) за наръчника |
 | Имейл | Gmail през SMTP с app password (по-бързо от OAuth): Send and Wait за одобрение до мениджъра и имейли с отговори до клиентите |
@@ -85,10 +85,9 @@ Credentials (създават се ръчно в n8n, с точно тези и�
 
 ## 6. Сървър и CI
 
-- `deploy/cloud-init.yml`:
-  - потребител `deploy` със SSH ключ, `PermitRootLogin no`, `PasswordAuthentication no`
-  - `unattended-upgrades`, swap 2 GB, Docker, мрежа `proxy`
-- Cloud Firewall: 80/443 за всички; 22 и 9443 само от твоето IP; 81 затворен (SSH тунел).
+- Hardening на съществуващия droplet (`deploy/harden.sh`): потребител `deploy` със SSH ключ и sudo, `PermitRootLogin no`, `PasswordAuthentication no`, `unattended-upgrades`, swap. Първо проверяваш, че влизаш като `deploy`, чак тогава се забранява root.
+- `deploy/cloud-init.yml`: същото за нов droplet (документация и резерва).
+- Cloud Firewall: 80/443 за всички; 22 и 9443 само от твоето IP; **81 се затваря** (SSH тунел).
 - `deploy/docker-compose.yml`: петте услуги, volumes, `env_file` от `/opt/hometech/.env` (chmod 600), non-root, където образът позволява.
 - `deploy/backup.sh`: `pg_dump` по cron в `/opt/hometech/backups` + тестван restore в отделна временна база (записваме резултата в README).
 - GitHub Actions: всички actions закачени за **конкретна версия**. PR: lint, typecheck, тестове, build. Merge в main: образи с версия (package.json + sha) в GHCR. Без автоматичен deploy: update на стека с re-pull в Portainer.
@@ -97,12 +96,12 @@ Credentials (създават се ръчно в n8n, с точно тези и�
 
 | Час | Аз (код) | Ти |
 |---|---|---|
-| 10:40–11:15 | Миграции (схема, pgvector, seed), compose с pgvector, cloud-init | Нов droplet с cloud-init, Cloud Firewall, DNS `app.` и `n8n.` в Cloudflare, Gmail app password, OpenAI ключ |
+| 10:40–11:15 | Миграции (схема, pgvector, seed), compose с pgvector, `harden.sh`, cloud-init | Cloud Firewall без 81, DNS `n8n.robodigit.win`, Gmail app password, OpenAI ключ |
 | 11:15–12:15 | Формата, `/api/tickets`, вход за служители, табло (списък, детайл, статус) | Локални n8n credentials с имената от т. 4 |
 | 12:15–14:00 | WF-1, WF-2, правилата с тестове, сценарии 1–10 локално | Тестваш сценариите в браузъра |
 | **14:00** | **Проверка: форма → n8n → база → табло работи ли от край до край?** Ако не — само поправки, без допълнителни задачи | |
 | 14:00–15:15 | WF-3 (одобрение, имейли), WF-E, security_log, SSE на живо, rate limit | Одобряваш тестово запитване от Gmail |
-| 15:15–16:15 | Deploy на сървъра: стек, NPM хостове, HTTPS, бекъп + restore | Portainer, NPM (през тунел), сертификати |
+| 15:15–16:15 | Deploy на сървъра: стек, NPM хост за n8n, бекъп + restore, hardening (`deploy` потребител) | Redeploy в Portainer, NPM (през тунел), сертификат за `n8n.` |
 | 16:15–17:15 | Допълнителни задачи по ред: `/track` → редакция и изпращане → асистент → снимка → дневен отчет. Каквото не стигне, отива в „следващи стъпки“ | Тестове на живо |
 | 17:15–18:00 | /code-review, /security-review, README, експорт на workflow-ите | Скрийншот на firewall, имейл до ментора до 18:00 |
 
@@ -125,7 +124,7 @@ Commit на всеки работещ етап. Ако нещо се счупи,
 
 ## 9. Какво предаваме
 
-- Live URL `https://app.robodigit.win` + тестов вход за служител.
+- Live URL `https://ai-exam.robodigit.win` + тестов вход за служител.
 - GitHub репо с `.env.example`, без тайни.
 - `n8n/workflows/*.json` (всички WF, включително WF-E).
 - README: какво прави, архитектура, таблица на WF, env и credentials само по име, локално пускане, корекция на плана и защо, ограничения, резултати от прегледите.
