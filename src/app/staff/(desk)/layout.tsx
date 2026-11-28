@@ -5,6 +5,9 @@ import { requireStaffPage } from "@/lib/staff";
 
 export const metadata = { title: "Табло · HomeTech поддръжка" };
 
+// Per-request only: needs the session and live data, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function DeskLayout({ children }: LayoutProps<"/staff">) {
   const staff = await requireStaffPage();
   return (
