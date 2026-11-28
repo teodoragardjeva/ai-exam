@@ -1,26 +1,31 @@
-# Website stack for Portainer (Stacks → Add stack → Web editor, paste this file).
-# Set the variables from deploy/stack.env.example in Portainer's "Environment variables".
+# HomeTech Smart Support Desk: the app stack for Portainer (Stacks → Repository,
+# compose path deploy/docker-compose.yml). Variables: deploy/stack.env.example.
 #
-# Before deploying, the shared network must exist on the server:
+# The shared network must exist on the server (Nginx Proxy Manager is on it):
 #   docker network create proxy
-# Nginx Proxy Manager is on that network and forwards the domain to http://app:3000.
+# NPM proxy hosts:
+#   ai-exam.robodigit.win → <app container>:3000
+#   n8n.robodigit.win     → <n8n container>:5678 (Websockets on). A Cloudflare WAF rule
+#                           allows only your IP, except /form-waiting/ and /webhook-waiting/.
 #
-# Only "app" joins "proxy". "db" and "n8n" publish no ports and are reachable only
-# on the stack's own "backend" network.
+# No service publishes a port. "db" is reachable only on the stack's "backend" network.
 
 services:
   app:
     # Private GHCR image: Portainer pulls it with the "ghcr" registry (PAT with read:packages).
-    # "latest" moves with every merge to main and every stable release.
-    # For a fixed version use a release tag instead, e.g. :1.0 or :1.0.0.
     image: ghcr.io/teodoragardjeva/ai-exam:latest
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-app}
+      # Passwords of the database roles the app creates on start (src/lib/migrate.ts).
       N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?set N8N_DB_PASSWORD}
+      N8N_APP_DB_PASSWORD: ${N8N_APP_DB_PASSWORD:?set N8N_APP_DB_PASSWORD}
+      N8N_READONLY_DB_PASSWORD: ${N8N_READONLY_DB_PASSWORD:?set N8N_READONLY_DB_PASSWORD}
       N8N_WEBHOOK_URL: http://n8n:5678/webhook
       BOT_SECRET: ${BOT_SECRET:?set BOT_SECRET}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      DEMO_ORDER_EMAIL: ${DEMO_ORDER_EMAIL:-}
+      DEMO_ORDER_NAME: ${DEMO_ORDER_NAME:-}
     depends_on:
       db:
         condition: service_healthy
@@ -29,8 +34,8 @@ services:
       - proxy
 
   db:
-    # n8n 2.x supports Postgres 17+ (16 only gets "compatibility support").
-    image: postgres:17-alpine
+    # Postgres 17 with pgvector (knowledge base embeddings). n8n 2.x needs Postgres 17+.
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
@@ -48,13 +53,12 @@ services:
 
   # Our n8n image (built from n8n/ by CI): on every start it imports and publishes the
   # workflows from n8n/workflows. Credentials are created once in the n8n UI with the
-  # names the workflows use (e.g. "Bot secret"); then restart n8n. See n8n/README.md.
+  # names the workflows use; then restart n8n. See n8n/README.md.
   n8n:
     image: ghcr.io/teodoragardjeva/ai-exam-n8n:latest
     restart: unless-stopped
     environment:
-      # n8n keeps its own data in the "n8n" schema, as the restricted "n8n" role
-      # that the app creates on startup (src/instrumentation.ts).
+      # n8n keeps its own data in the "n8n" schema, as the restricted "n8n" role.
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: db
       DB_POSTGRESDB_PORT: 5432
@@ -66,8 +70,14 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: ${TZ:-Europe/Sofia}
       TZ: ${TZ:-Europe/Sofia}
-      # The editor is opened only through an SSH tunnel over plain http.
-      N8N_SECURE_COOKIE: "false"
+      # Public URL: links in approval emails (Send and Wait forms) point here.
+      N8N_HOST: ${N8N_PUBLIC_HOST:-n8n.robodigit.win}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_PUBLIC_HOST:-n8n.robodigit.win}/
+      N8N_EDITOR_BASE_URL: https://${N8N_PUBLIC_HOST:-n8n.robodigit.win}/
+      # Behind Cloudflare + NPM.
+      N8N_PROXY_HOPS: 2
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-true}
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_AUTOLOAD_WORKFLOWS: ${N8N_AUTOLOAD_WORKFLOWS:-true}
@@ -78,6 +88,7 @@ services:
         condition: service_healthy
     networks:
       - backend
+      - proxy
 
 volumes:
   db_data:
