@@ -191,7 +191,7 @@ npm run scenarios      # 10-те сценария (вдигни TICKETS_RATE_LIM
 
 **Сървър:** Ubuntu 24.04, потребител `deploy` (SSH ключ, sudo), **вход с root и с парола забранени**, `unattended-upgrades`, 2 GB swap (`deploy/harden.sh`). `deploy/cloud-init.yml` създава същото на нов droplet. Стекът е `deploy/docker-compose.yml` (Portainer, Repository); NPM и Portainer са в `deploy/nginx-proxy-manager/` и `deploy/portainer/`.
 
-**Cloud Firewall (DigitalOcean):** 80/443 само от IP диапазоните на Cloudflare (https://www.cloudflare.com/ips/): посетителите идват през Cloudflare, а директна връзка към IP-то на сървъра (покрай WAF-а и с подправен `cf-connecting-ip`) не минава. 22, 9443 и 81 (NPM админ) само от моето IP; всичко останало затворено. Заданието иска 81 да е напълно затворен; оставен е отворен само за моето IP по решение на собственика, а препоръчителният достъп до NPM е през SSH тунел:
+**Cloud Firewall (DigitalOcean):** 80/443 само от IP диапазоните на Cloudflare (https://www.cloudflare.com/ips/): посетителите идват през Cloudflare, а директна връзка към IP-то на сървъра (покрай WAF-а и с подправен `cf-connecting-ip`) не минава. 22 и 9443 само от моето IP; всичко останало затворено, включително **81 (NPM админ), напълно затворен**, както иска заданието. До NPM се стига само през SSH тунел:
 
 ```bash
 ssh -N -L 8181:127.0.0.1:81 deploy@<server-ip>     # после http://localhost:8181
