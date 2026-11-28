@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChat, parseStatusChange, parseTicket, parseTrack } from "@/lib/validation";
+import { parseChat, parseReply, parseStatusChange, parseTicket, parseTrack } from "@/lib/validation";
 
 describe("parseTicket", () => {
   it("accepts, trims and normalizes valid input", () => {
@@ -40,6 +40,17 @@ describe("parseStatusChange", () => {
 
   it("rejects an unknown status", () => {
     expect(parseStatusChange({ status: "Deleted" }).ok).toBe(false);
+  });
+});
+
+describe("parseReply", () => {
+  it("accepts a reply and trims it", () => {
+    expect(parseReply({ reply: "  Здравейте, Мария!  " })).toEqual({ ok: true, value: { reply: "Здравейте, Мария!" } });
+  });
+
+  it("rejects empty and too long replies", () => {
+    expect(parseReply({ reply: " " }).ok).toBe(false);
+    expect(parseReply({ reply: "x".repeat(5001) }).ok).toBe(false);
   });
 });
 

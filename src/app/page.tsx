@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TicketForm } from "@/components/TicketForm";
 
 export default function Home() {
@@ -11,6 +12,9 @@ export default function Home() {
         </p>
       </header>
       <TicketForm />
+      <Link href="/track" className="text-sm underline">
+        Вече сте писали? Проследете запитването си →
+      </Link>
     </main>
   );
 }

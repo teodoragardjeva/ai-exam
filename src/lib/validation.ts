@@ -51,6 +51,13 @@ export function parseStatusChange(body: unknown): Result<{ status: TicketStatus;
   return { ok: true, value: { status, reason } };
 }
 
+export function parseReply(body: unknown): Result<{ reply: string }> {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const reply = text(b.reply);
+  if (reply.length < 5 || reply.length > 5000) return { ok: false, errors: ["reply"] };
+  return { ok: true, value: { reply } };
+}
+
 export function parseChat(body: unknown): Result<ChatInput> {
   const b = (body ?? {}) as Record<string, unknown>;
   const value = { message: text(b.message), sessionId: text(b.sessionId) };

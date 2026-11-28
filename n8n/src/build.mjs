@@ -16,6 +16,7 @@ export const IDS = {
   kbLoad: "hometechKbLoad01",
   intake: "hometechIntake01",
   approval: "hometechApprov01",
+  sendReply: "hometechSendRp01",
   errors: "hometechErrors01",
 };
 
@@ -736,6 +737,61 @@ WHERE ticket_number = $1`,
   ]);
 }
 
+// ---------- WF-4: staff edits the reply in the dashboard and sends it ----------
+function sendReply() {
+  const nodes = [
+    node(
+      "Webhook",
+      base("webhook"),
+      2,
+      { httpMethod: "POST", path: "send-reply", authentication: "headerAuth", responseMode: "responseNode", options: {} },
+      [0, 0],
+      { webhookId: "7b0c3e4a-9d5f-4a81-bc3d-4e5f6a7b8c93", credentials: CRED.botSecret },
+    ),
+    pg(
+      "Load ticket",
+      `SELECT ticket_number, customer_name, customer_email FROM tickets WHERE ticket_number = upper(trim($1))`,
+      "={{ [ $json.body.ticket_number ] }}",
+      [220, 0],
+      { alwaysOutputData: true, ...RETRY },
+    ),
+    ifTrue("Ticket found?", "={{ Boolean($json.ticket_number) }}", [440, 0]),
+    respond("Respond: not found", '={{ { "ok": false, "error": "not_found" } }}', [660, 180]),
+    node(
+      "Email customer",
+      base("gmail"),
+      2.1,
+      {
+        sendTo: "={{ $json.customer_email }}",
+        subject: "=HomeTech поддръжка: {{ $json.ticket_number }}",
+        emailType: "text",
+        message: "={{ $('Webhook').item.json.body.reply }}",
+        options: { appendAttribution: false },
+      },
+      [660, -80],
+      { credentials: CRED.gmail, ...RETRY },
+    ),
+    pg(
+      "Save sent reply",
+      `UPDATE tickets SET status = 'Approved & sent', final_reply = $2, handled_by = $3,
+  status_reason = 'Редактирано и изпратено от таблото'
+WHERE ticket_number = $1`,
+      "={{ [ $('Load ticket').item.json.ticket_number, $('Webhook').item.json.body.reply, $('Webhook').item.json.body.staff_email + ' (табло)' ] }}",
+      [880, -80],
+      RETRY,
+    ),
+    respond("Respond: sent", '={{ { "ok": true, "status": "Approved & sent" } }}', [1100, -80]),
+  ];
+  return workflow(IDS.sendReply, "WF-4 Send edited reply (webhook send-reply)", nodes, [
+    ["Webhook", "Load ticket"],
+    ["Load ticket", "Ticket found?"],
+    ["Ticket found?", "Email customer", "main", 0],
+    ["Ticket found?", "Respond: not found", "main", 1],
+    ["Email customer", "Save sent reply"],
+    ["Save sent reply", "Respond: sent"],
+  ]);
+}
+
 // ---------- WF-E: errors ----------
 function errors() {
   const nodes = [
@@ -780,6 +836,7 @@ export function buildAll() {
     "wf1-kb-load.json": kbLoad(),
     "wf2-intake-triage.json": intake(),
     "wf3-approval-reply.json": approval(),
+    "wf4-send-reply.json": sendReply(),
     "wfe-errors.json": errors(),
   };
 }

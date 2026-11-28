@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge, UrgencyBadge } from "@/components/staff/Badges";
+import { ReplyEditor } from "@/components/staff/ReplyEditor";
 import { StatusForm } from "@/components/staff/StatusForm";
 import { departmentLabel, languageLabel, sentimentLabel } from "@/lib/labels";
 import { requireStaffPage } from "@/lib/staff";
@@ -56,6 +57,15 @@ export default async function TicketPage({ params }: PageProps<"/staff/tickets/[
           <Card title="Финален отговор">
             <p className="whitespace-pre-wrap">{ticket.final_reply ?? "Още не е изпратен."}</p>
           </Card>
+          {ticket.status !== "Closed" && (
+            <Card title="Редакция и изпращане на клиента">
+              <ReplyEditor
+                ticketNumber={ticket.ticket_number}
+                initial={ticket.final_reply ?? ticket.ai_draft_reply ?? ""}
+                customerEmail={ticket.customer_email}
+              />
+            </Card>
+          )}
         </div>
 
         <aside className="flex flex-col gap-6">
