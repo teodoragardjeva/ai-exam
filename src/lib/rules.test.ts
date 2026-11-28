@@ -138,6 +138,16 @@ describe("rule boundaries", () => {
     expect(d).toMatchObject({ policy_rule: "R7", urgency: "Medium" });
   });
 
+  it("writes every status reason in Bulgarian (shown in the staff dashboard)", () => {
+    const reasons = [
+      run("HT-10427", { department: "Technical support", ai: ai({ answer_found_in_kb: true }) }),
+      run("HT-10425", { department: "Shipping & delivery", ai: ai({ answer_found_in_kb: true }) }),
+      run("HT-10427", { department: "Other" }),
+      run("HT-10421", { department: "Returns & refunds", ai: ai({ refund_requested: true }) }),
+    ].map((d) => d.status_reason);
+    for (const r of reasons) expect(r).not.toMatch(/Technical support|Shipping & delivery|Returns & refunds|Other/);
+  });
+
   it("accepts Postgres timestamps as purchase_date", () => {
     const d = decide({ today: TODAY, order: { purchase_date: "2026-11-23T00:00:00.000Z", amount_eur: "39.80" }, injection: false, sentiment: neutral, department: "Returns & refunds", ai: ai({ refund_requested: true }) });
     expect(d.policy_rule).toBe("R2");

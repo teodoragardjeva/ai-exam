@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { departmentLabel, statusLabel, urgencyLabel } from "@/lib/labels";
 import { DEPARTMENTS, TICKET_STATUSES, URGENCIES } from "@/lib/migrations";
 import { requireStaffPage } from "@/lib/staff";
 import { cleanFilters, getStats, listTickets } from "@/lib/tickets";
@@ -16,14 +17,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/staff"
           <p className="text-sm text-zinc-500">Отворени запитвания</p>
           <p className="text-4xl font-semibold">{stats.open}</p>
         </div>
-        <StatList title="Отворени по отдел" rows={stats.byDepartment} />
-        <StatList title="Отворени по спешност" rows={stats.byUrgency} highlight="High" />
+        <StatList title="Отворени по отдел" rows={stats.byDepartment} label={departmentLabel} />
+        <StatList title="Отворени по спешност" rows={stats.byUrgency} label={urgencyLabel} highlight="High" />
       </section>
 
       <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-sm dark:bg-zinc-900">
-        <Select name="status" label="Статус" options={TICKET_STATUSES} value={filters.status} />
-        <Select name="department" label="Отдел" options={DEPARTMENTS} value={filters.department} />
-        <Select name="urgency" label="Спешност" options={URGENCIES} value={filters.urgency} />
+        <Select name="status" label="Статус" options={TICKET_STATUSES} optionLabel={statusLabel} value={filters.status} />
+        <Select name="department" label="Отдел" options={DEPARTMENTS} optionLabel={departmentLabel} value={filters.department} />
+        <Select name="urgency" label="Спешност" options={URGENCIES} optionLabel={urgencyLabel} value={filters.urgency} />
         <button type="submit" className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white">
           Филтрирай
         </button>
@@ -70,7 +71,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/staff"
                     {t.customer_name}
                     <span className="block text-xs text-zinc-500">{t.order_number}</span>
                   </td>
-                  <td className="px-4 py-3">{t.department ?? "—"}</td>
+                  <td className="px-4 py-3">{departmentLabel(t.department)}</td>
                   <td className="px-4 py-3">
                     <UrgencyBadge urgency={t.urgency} />
                   </td>
@@ -90,7 +91,17 @@ export default async function DashboardPage({ searchParams }: PageProps<"/staff"
   );
 }
 
-function StatList({ title, rows, highlight }: { title: string; rows: { key: string; count: number }[]; highlight?: string }) {
+function StatList({
+  title,
+  rows,
+  label,
+  highlight,
+}: {
+  title: string;
+  rows: { key: string; count: number }[];
+  label: (value: string) => string;
+  highlight?: string;
+}) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-zinc-900">
       <p className="mb-2 text-sm text-zinc-500">{title}</p>
@@ -98,7 +109,7 @@ function StatList({ title, rows, highlight }: { title: string; rows: { key: stri
       <ul className="flex flex-col gap-1 text-sm">
         {rows.map((r) => (
           <li key={r.key} className={`flex justify-between gap-4 ${r.key === highlight ? "font-semibold text-red-600" : ""}`}>
-            <span>{r.key}</span>
+            <span>{label(r.key)}</span>
             <span className="font-mono">{r.count}</span>
           </li>
         ))}
@@ -107,7 +118,19 @@ function StatList({ title, rows, highlight }: { title: string; rows: { key: stri
   );
 }
 
-function Select({ name, label, options, value }: { name: string; label: string; options: readonly string[]; value?: string }) {
+function Select({
+  name,
+  label,
+  options,
+  optionLabel,
+  value,
+}: {
+  name: string;
+  label: string;
+  options: readonly string[];
+  optionLabel: (value: string) => string;
+  value?: string;
+}) {
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-zinc-500">{label}</span>
@@ -115,7 +138,7 @@ function Select({ name, label, options, value }: { name: string; label: string; 
         <option value="">Всички</option>
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {optionLabel(o)}
           </option>
         ))}
       </select>

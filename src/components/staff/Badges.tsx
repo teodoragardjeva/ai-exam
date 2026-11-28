@@ -1,3 +1,5 @@
+import { statusLabel, urgencyLabel } from "@/lib/labels";
+
 const STATUS_STYLES: Record<string, string> = {
   New: "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100",
   "Auto-answered": "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
@@ -9,7 +11,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[status] ?? ""}`}>{status}</span>;
+  return <span className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[status] ?? ""}`}>{statusLabel(status)}</span>;
 }
 
 export function UrgencyBadge({ urgency }: { urgency: string | null }) {
@@ -20,5 +22,5 @@ export function UrgencyBadge({ urgency }: { urgency: string | null }) {
       : urgency === "Medium"
         ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
         : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${style}`}>{urgency}</span>;
+  return <span className={`rounded-full px-2 py-1 text-xs font-semibold ${style}`}>{urgencyLabel(urgency)}</span>;
 }

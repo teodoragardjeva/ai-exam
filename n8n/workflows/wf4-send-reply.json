@@ -1,0 +1,251 @@
+{
+  "id": "hometechSendRp01",
+  "name": "WF-4 Send edited reply (webhook send-reply)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-reply",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000064",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "7b0c3e4a-9d5f-4a81-bc3d-4e5f6a7b8c93",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "botSecretHeader1",
+          "name": "Bot secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_number, customer_name, customer_email FROM tickets WHERE ticket_number = upper(trim($1))",
+        "options": {
+          "queryReplacement": "={{ [ $json.body.ticket_number ] }}"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000065",
+      "name": "Load ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000066",
+              "leftValue": "={{ Boolean($json.ticket_number) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "00000000-0000-4000-8000-000000000067",
+      "name": "Ticket found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"error\": \"not_found\" } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000068",
+      "name": "Respond: not found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        660,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_email }}",
+        "subject": "=HomeTech поддръжка: {{ $json.ticket_number }}",
+        "emailType": "text",
+        "message": "={{ $('Webhook').item.json.body.reply }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000069",
+      "name": "Email customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        660,
+        -80
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmailAccountCrd1",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET status = 'Approved & sent', final_reply = $2, handled_by = $3,\n  status_reason = 'Редактирано и изпратено от таблото'\nWHERE ticket_number = $1",
+        "options": {
+          "queryReplacement": "={{ [ $('Load ticket').item.json.ticket_number, $('Webhook').item.json.body.reply, $('Webhook').item.json.body.staff_email + ' (табло)' ] }}"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000070",
+      "name": "Save sent reply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgresAppCred1",
+          "name": "Postgres app"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"status\": \"Approved & sent\" } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000071",
+      "name": "Respond: sent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1100,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load ticket": {
+      "main": [
+        [
+          {
+            "node": "Ticket found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket found?": {
+      "main": [
+        [
+          {
+            "node": "Email customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: not found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email customer": {
+      "main": [
+        [
+          {
+            "node": "Save sent reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save sent reply": {
+      "main": [
+        [
+          {
+            "node": "Respond: sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "hometechErrors01"
+  },
+  "pinData": {}
+}

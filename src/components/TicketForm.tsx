@@ -90,7 +90,13 @@ export function TicketForm() {
           Номер на запитването: <strong className="font-mono text-xl">{status.ticketNumber}</strong>
         </p>
         <p>Ще получите отговор по имейл до 1 работен ден (поддръжката работи пн–пт, 09:00–18:00).</p>
-        <p className="text-sm">Запазете номера: с него и имейла си можете да проследите запитването.</p>
+        <p className="text-sm">
+          Запазете номера: с него и имейла си можете да{" "}
+          <a href="/track" className="underline">
+            проследите запитването
+          </a>
+          .
+        </p>
         <button type="button" onClick={() => setStatus({ kind: "idle" })} className="self-start text-sm underline">
           Ново запитване
         </button>

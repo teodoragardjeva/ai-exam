@@ -100,6 +100,28 @@ export async function getTicket(ticketNumber: string): Promise<Ticket | null> {
   return rows[0] ?? null;
 }
 
+// Public "track my ticket": only with the ticket number AND the email it was sent from,
+// and only the status and the reply that was actually sent (never the AI draft or notes).
+export type TrackedTicket = { ticketNumber: string; status: TicketStatus; createdAt: string; reply: string | null };
+
+const REPLY_VISIBLE: TicketStatus[] = ["Auto-answered", "Approved & sent", "Rejected", "Closed"];
+
+export async function trackTicket(ticketNumber: string, email: string): Promise<TrackedTicket | null> {
+  const { rows } = await getPool().query<{ ticket_number: string; status: TicketStatus; created_at: string; final_reply: string | null }>(
+    `SELECT ticket_number, status, created_at, final_reply FROM tickets
+     WHERE ticket_number = $1 AND lower(customer_email) = lower($2)`,
+    [ticketNumber, email],
+  );
+  const t = rows[0];
+  if (!t) return null;
+  return {
+    ticketNumber: t.ticket_number,
+    status: t.status,
+    createdAt: t.created_at,
+    reply: REPLY_VISIBLE.includes(t.status) ? t.final_reply : null,
+  };
+}
+
 export async function updateTicketStatus(
   ticketNumber: string,
   status: TicketStatus,

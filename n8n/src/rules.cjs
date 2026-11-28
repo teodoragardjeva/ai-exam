@@ -67,7 +67,8 @@ function decide(input) {
       : result("R5", "Rejected", baseUrgency, `Дефект след изтичане на ${WARRANTY_MONTHS}-месечната гаранция (${ageDays} дни): платен ремонт`);
   }
   if ((input.department === "Technical support" || input.department === "Shipping & delivery") && ai.answer_found_in_kb) {
-    return result("R7", "Auto-answered", baseUrgency, `${input.department}: отговорът е намерен в наръчника`);
+    const topic = input.department === "Technical support" ? "Технически въпрос" : "Въпрос за доставка";
+    return result("R7", "Auto-answered", baseUrgency, `${topic}: отговорът е намерен в наръчника`);
   }
   return result("R8", "Manual review", baseUrgency,
     ai.answer_found_in_kb ? "Не попада в автоматичните правила: ръчен преглед" : "Отговорът не е в наръчника: ръчен преглед");
