@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { Brand } from "@/components/Brand";
+import { AssistantLink } from "@/components/staff/AssistantLink";
 import { LiveRefresh } from "@/components/staff/LiveRefresh";
 import { SignOutButton } from "@/components/staff/SignOutButton";
 import { requireStaffPage } from "@/lib/staff";
@@ -11,23 +11,34 @@ export const dynamic = "force-dynamic";
 
 export default async function DeskLayout({ children }: LayoutProps<"/staff">) {
   const staff = await requireStaffPage();
+  const initials = staff.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
-      <header className="border-b border-slate-200 bg-white shadow-sm">
-        <div aria-hidden className="h-1 bg-gradient-to-r from-brand-navy via-brand-blue to-brand-cyan" />
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <header className="relative overflow-hidden bg-gradient-to-r from-accent-dark via-accent to-[#0e9aa7] text-white shadow-md shadow-accent/20">
+        <div aria-hidden className="absolute -top-16 right-1/3 size-48 rounded-full bg-mint/30 blur-3xl" />
+        <div className="relative mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <nav className="flex items-center gap-4">
-            <Brand href="/staff" size={32} suffix="Табло" />
-            {staff.role === "manager" && (
-              <Link href="/staff/assistant" className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-blue hover:bg-brand-blue/10">
-                Асистент
-              </Link>
-            )}
+            <Brand href="/staff" size={30} suffix="Табло" tone="light" />
+            {staff.role === "manager" && <AssistantLink />}
           </nav>
           <div className="flex items-center gap-4 text-sm">
             <LiveRefresh />
-            <span className="text-zinc-600 dark:text-zinc-400">
-              {staff.name} ({staff.role === "manager" ? "мениджър" : "служител"})
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="flex size-8 items-center justify-center rounded-full bg-white/20 text-xs font-bold ring-1 ring-white/30"
+              >
+                {initials}
+              </span>
+              <span className="leading-tight">
+                <span className="block font-medium">{staff.name}</span>
+                <span className="block text-xs text-teal-50/80">{staff.role === "manager" ? "мениджър" : "служител"}</span>
+              </span>
             </span>
             <SignOutButton />
           </div>

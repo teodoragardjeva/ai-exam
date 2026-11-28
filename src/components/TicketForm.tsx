@@ -95,7 +95,7 @@ export function TicketForm() {
         <p>Ще получите отговор по имейл до 1 работен ден (поддръжката работи пн–пт, 09:00–18:00).</p>
         <p className="text-sm">
           Запазете номера: с него и имейла си можете да{" "}
-          <a href="/track" className="font-medium text-brand-blue underline">
+          <a href="/track" className="font-medium text-accent-dark underline">
             проследите запитването
           </a>
           .

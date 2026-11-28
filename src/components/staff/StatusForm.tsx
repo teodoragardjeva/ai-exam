@@ -45,7 +45,7 @@ export function StatusForm({ ticketNumber, current }: { ticketNumber: string; cu
       </select>
       <input name="reason" maxLength={500} placeholder="Причина (по желание)" className="h-10 rounded-lg border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-900" />
       {error && <p role="alert" className="text-red-600">{error}</p>}
-      <button type="submit" disabled={pending} className="h-10 rounded-lg bg-blue-600 font-semibold text-white disabled:opacity-50">
+      <button type="submit" disabled={pending} className="h-10 rounded-lg bg-accent hover:bg-accent-dark font-semibold text-white disabled:opacity-50">
         {pending ? "Запазване…" : "Запази статуса"}
       </button>
     </form>

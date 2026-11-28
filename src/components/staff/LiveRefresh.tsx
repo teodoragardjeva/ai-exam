@@ -26,8 +26,8 @@ export function LiveRefresh() {
   }, [router]);
 
   return (
-    <span className="flex items-center gap-2 text-xs text-zinc-500" title={live ? "Таблото се обновява на живо" : "Няма връзка за обновяване на живо"}>
-      <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-500" : "bg-zinc-400"}`} />
+    <span className="flex items-center gap-2 text-xs opacity-80" title={live ? "Таблото се обновява на живо" : "Няма връзка за обновяване на живо"}>
+      <span className={`h-2 w-2 rounded-full ${live ? "bg-mint shadow-[0_0_6px] shadow-mint" : "bg-zinc-400"}`} />
       {live ? "На живо" : "Офлайн"}
     </span>
   );

@@ -59,7 +59,7 @@ export function AssistantChat() {
             key={i}
             className={
               m.role === "user"
-                ? "self-end max-w-[85%] rounded-2xl bg-blue-600 px-4 py-2 text-white"
+                ? "self-end max-w-[85%] rounded-2xl bg-gradient-to-br from-accent to-brand-cyan px-4 py-2 text-white"
                 : "self-start max-w-[85%] whitespace-pre-wrap rounded-2xl bg-white px-4 py-2 shadow-sm dark:bg-zinc-900"
             }
           >
@@ -83,7 +83,7 @@ export function AssistantChat() {
           placeholder="Попитайте за запитванията…"
           className="h-11 flex-1 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-900"
         />
-        <button type="submit" disabled={pending || !input.trim()} className="h-11 rounded-xl bg-blue-600 px-4 font-semibold text-white disabled:opacity-50">
+        <button type="submit" disabled={pending || !input.trim()} className="btn-primary h-11">
           Питай
         </button>
       </form>

@@ -25,7 +25,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/staff"
         <Select name="status" label="Статус" options={TICKET_STATUSES} optionLabel={statusLabel} value={filters.status} />
         <Select name="department" label="Отдел" options={DEPARTMENTS} optionLabel={departmentLabel} value={filters.department} />
         <Select name="urgency" label="Спешност" options={URGENCIES} optionLabel={urgencyLabel} value={filters.urgency} />
-        <button type="submit" className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white">
+        <button type="submit" className="h-10 rounded-lg bg-accent px-4 hover:bg-accent-dark text-sm font-semibold text-white">
           Филтрирай
         </button>
         <Link href="/staff" className="h-10 content-center text-sm underline">
@@ -62,7 +62,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/staff"
                   className={`border-b border-zinc-100 last:border-0 dark:border-zinc-800 ${urgent ? "bg-red-50 dark:bg-red-950/40" : ""}`}
                 >
                   <td className="px-4 py-3 font-mono">
-                    <Link href={`/staff/tickets/${t.ticket_number}`} className="text-blue-600 underline">
+                    <Link href={`/staff/tickets/${t.ticket_number}`} className="font-medium text-accent-dark underline">
                       {t.ticket_number}
                     </Link>
                   </td>

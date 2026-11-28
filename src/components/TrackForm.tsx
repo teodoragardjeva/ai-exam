@@ -51,13 +51,13 @@ export function TrackForm() {
       )}
 
       {state.kind === "found" && (
-        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/5 p-5">
+        <section role="status" className="flex flex-col gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-5">
           <p>
             <span className="font-mono font-semibold">{state.ticket.ticketNumber}</span> ·{" "}
             {new Date(state.ticket.createdAt).toLocaleString("bg-BG", { timeZone: "Europe/Sofia", dateStyle: "short", timeStyle: "short" })}
           </p>
           <p>
-            Статус: <strong className="rounded-full bg-brand-blue px-2.5 py-0.5 text-sm text-white">{state.ticket.statusLabel}</strong>
+            Статус: <strong className="rounded-full bg-accent px-2.5 py-0.5 text-sm text-white">{state.ticket.statusLabel}</strong>
           </p>
           {state.ticket.reply ? (
             <div>
