@@ -17,6 +17,7 @@ const RULE_LABELS: Record<string, string> = {
   R7: "R7 · технически въпрос или доставка, отговорено от наръчника",
   R8: "R8 · всичко останало: ръчен преглед",
   INJECTION: "Открит опит за prompt injection: ръчен преглед",
+  GUARDRAIL: "Guardrails спряха AI отговора: ръчен преглед",
 };
 
 export default async function TicketPage({ params }: PageProps<"/staff/tickets/[number]">) {

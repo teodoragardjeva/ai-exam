@@ -107,6 +107,24 @@ describe("business rules on the Appendix C scenarios", () => {
     expect(d).toMatchObject({ policy_rule: "INJECTION", status: "Manual review", send_reply: false, needs_approval: false });
   });
 
+  it("output guardrail blocked the draft → Manual review, nothing sent, even when R2 would auto-answer", () => {
+    const d = run("HT-10421", { output_blocked: true, output_block_reason: "urls", ai: ai({ refund_requested: true }) });
+    expect(d).toMatchObject({ policy_rule: "GUARDRAIL", status: "Manual review", urgency: "Medium", send_reply: false, needs_approval: false });
+    expect(d.status_reason).toContain("urls");
+    expect(d.status_reason).toContain("R2");
+  });
+
+  it("output guardrail on a rule that needs approval anyway → rule stays, the approver is warned", () => {
+    const angry = { category: "Negative", strength: 0.95, confidence: 0.9 };
+    const d = run("HT-10422", { sentiment: angry, output_blocked: true, output_block_reason: "Policy & leak" });
+    expect(d).toMatchObject({ policy_rule: "R6", status: "Waiting for approval", urgency: "High", send_reply: false, needs_approval: true });
+    expect(d.status_reason).toContain("Policy & leak");
+  });
+
+  it("injection still wins over a blocked output", () => {
+    expect(run("HT-10421", { injection: true, output_blocked: true }).policy_rule).toBe("INJECTION");
+  });
+
   it("10: 20% discount, not in the handbook → R8 Manual review", () => {
     const d = run("HT-10427", { department: "Other", ai: ai({ answer_found_in_kb: false }) });
     expect(d).toMatchObject({ policy_rule: "R8", status: "Manual review", send_reply: false });

@@ -4,7 +4,7 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "00000000-0000-4000-8000-000000000088",
+      "id": "00000000-0000-4000-8000-000000000098",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
@@ -21,7 +21,7 @@
           "queryReplacement": "={{ [ $json.workflow.name, $json.execution.lastNodeExecuted || ($json.execution.error && $json.execution.error.node && $json.execution.error.node.name) || null, ($json.execution.error && $json.execution.error.message) || 'Unknown error', $json.execution.url || null ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000089",
+      "id": "00000000-0000-4000-8000-000000000099",
       "name": "Write error_log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -48,7 +48,7 @@
           "queryReplacement": "={{ [ String($('Error Trigger').item.json.execution.id), ($('Error Trigger').item.json.execution.error && $('Error Trigger').item.json.execution.error.message) || 'неизвестна грешка' ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000090",
+      "id": "00000000-0000-4000-8000-000000000100",
       "name": "Ticket to manual review",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -74,7 +74,7 @@
         "query": "SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'",
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000091",
+      "id": "00000000-0000-4000-8000-000000000101",
       "name": "Manager email",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -100,7 +100,7 @@
           "appendAttribution": false
         }
       },
-      "id": "00000000-0000-4000-8000-000000000092",
+      "id": "00000000-0000-4000-8000-000000000102",
       "name": "Notify manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,

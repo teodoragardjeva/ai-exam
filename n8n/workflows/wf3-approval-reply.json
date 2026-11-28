@@ -6,7 +6,7 @@
       "parameters": {
         "inputSource": "passthrough"
       },
-      "id": "00000000-0000-4000-8000-000000000050",
+      "id": "00000000-0000-4000-8000-000000000056",
       "name": "From WF-2",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
@@ -21,7 +21,7 @@
         "query": "SELECT value AS manager_email FROM app_settings WHERE key = 'manager_email'",
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000051",
+      "id": "00000000-0000-4000-8000-000000000057",
       "name": "Manager email",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -44,7 +44,7 @@
       "parameters": {
         "jsCode": "const t = $('From WF-2').first().json;\nconst manager = $input.first().json.manager_email || null;\nreturn [{ json: { ...t, manager_email: manager } }];"
       },
-      "id": "00000000-0000-4000-8000-000000000052",
+      "id": "00000000-0000-4000-8000-000000000058",
       "name": "Ticket",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -64,7 +64,7 @@
           },
           "conditions": [
             {
-              "id": "00000000-0000-4000-8000-000000000053",
+              "id": "00000000-0000-4000-8000-000000000059",
               "leftValue": "={{ $json.needs_approval }}",
               "rightValue": true,
               "operator": {
@@ -79,7 +79,7 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000054",
+      "id": "00000000-0000-4000-8000-000000000060",
       "name": "Needs approval?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -135,7 +135,7 @@
           }
         }
       },
-      "id": "00000000-0000-4000-8000-000000000055",
+      "id": "00000000-0000-4000-8000-000000000061",
       "name": "Ask manager (Send and Wait)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
@@ -162,7 +162,7 @@
           "queryReplacement": "={{ [ $('Ticket').item.json.ticket_number ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000056",
+      "id": "00000000-0000-4000-8000-000000000062",
       "name": "Current status",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -185,7 +185,7 @@
       "parameters": {
         "jsCode": "const t = $('Ticket').first().json;\nconst answer = $('Ask manager (Send and Wait)').first().json;\nconst data = answer.data || answer;\nconst pick = (label) => data[label] ?? Object.entries(data).find(([k]) => k.toLowerCase().includes(label.toLowerCase()))?.[1];\nconst decision = String(pick(\"Решение\") ?? \"\").trim();\nconst edited = String(pick(\"Отговор към клиента\") ?? \"\").trim();\nconst comment = String(pick(\"Коментар\") ?? \"\").trim();\nconst current = $input.first().json.status;\nconst handledBy = (t.manager_email || \"manager\") + \" (Gmail)\";\n\n// stale: already handled elsewhere → do nothing. timeout: no answer within the wait limit →\n// back to manual review, never an automatic rejection.\nlet action;\nif (current !== \"Waiting for approval\") action = \"stale\";\nelse if (!decision) action = \"timeout\";\nelse action = decision.startsWith(\"Одобри\") ? \"approved\" : \"rejected\";\n\nconst out = { ...t, action, approved: action === \"approved\", handled_by: handledBy };\nif (action === \"approved\") {\n  out.final_status = \"Approved & sent\";\n  out.final_reply = edited || t.draft_reply;\n  out.reason = comment ? \"Мениджър: \" + comment : \"Одобрено от мениджъра\";\n} else if (action === \"rejected\") {\n  out.final_status = \"Rejected\";\n  out.reason = comment ? \"Мениджър: \" + comment : \"Отказано от мениджъра\";\n} else if (action === \"timeout\") {\n  out.final_status = \"Manual review\";\n  out.handled_by = null;\n  out.reason = \"Няма отговор от мениджъра в срок: нужен е ръчен преглед\";\n}\nreturn [{ json: out }];"
       },
-      "id": "00000000-0000-4000-8000-000000000057",
+      "id": "00000000-0000-4000-8000-000000000063",
       "name": "Approval result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -205,7 +205,7 @@
           },
           "conditions": [
             {
-              "id": "00000000-0000-4000-8000-000000000058",
+              "id": "00000000-0000-4000-8000-000000000064",
               "leftValue": "={{ $json.approved }}",
               "rightValue": true,
               "operator": {
@@ -220,7 +220,7 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "00000000-0000-4000-8000-000000000059",
+      "id": "00000000-0000-4000-8000-000000000065",
       "name": "Approved?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -233,7 +233,7 @@
       "parameters": {
         "jsCode": "const t = $input.first().json;\nreturn [{ json: { ...t, final_status: t.status, final_reply: t.draft_reply, handled_by: \"AI (автоматично)\", reason: null } }];"
       },
-      "id": "00000000-0000-4000-8000-000000000060",
+      "id": "00000000-0000-4000-8000-000000000066",
       "name": "Auto reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -246,7 +246,7 @@
       "parameters": {
         "jsCode": "// Both paths (approved by the manager, or answered automatically) meet here.\nreturn $input.all().map((i) => ({ json: i.json }));"
       },
-      "id": "00000000-0000-4000-8000-000000000061",
+      "id": "00000000-0000-4000-8000-000000000067",
       "name": "Final reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -265,7 +265,7 @@
           "appendAttribution": false
         }
       },
-      "id": "00000000-0000-4000-8000-000000000062",
+      "id": "00000000-0000-4000-8000-000000000068",
       "name": "Email customer",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
@@ -291,7 +291,7 @@
           "queryReplacement": "={{ [ $('Final reply').item.json.ticket_number, $('Final reply').item.json.final_status, $('Final reply').item.json.final_reply, $('Final reply').item.json.handled_by, $('Final reply').item.json.reason ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000063",
+      "id": "00000000-0000-4000-8000-000000000069",
       "name": "Save final reply",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -317,7 +317,7 @@
           "queryReplacement": "={{ [ $json.ticket_number, $json.final_status || 'Waiting for approval', $json.handled_by, $json.reason || null, $json.action !== 'stale' ] }}"
         }
       },
-      "id": "00000000-0000-4000-8000-000000000064",
+      "id": "00000000-0000-4000-8000-000000000070",
       "name": "Save decision",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
