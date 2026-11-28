@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Brand } from "@/components/Brand";
 import { LiveRefresh } from "@/components/staff/LiveRefresh";
 import { SignOutButton } from "@/components/staff/SignOutButton";
 import { requireStaffPage } from "@/lib/staff";
@@ -11,15 +12,14 @@ export const dynamic = "force-dynamic";
 export default async function DeskLayout({ children }: LayoutProps<"/staff">) {
   const staff = await requireStaffPage();
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex min-h-full flex-1 flex-col bg-background">
+      <header className="border-b border-slate-200 bg-white shadow-sm">
+        <div aria-hidden className="h-1 bg-gradient-to-r from-brand-navy via-brand-blue to-brand-cyan" />
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <nav className="flex items-center gap-4">
-            <Link href="/staff" className="font-semibold">
-              HomeTech · Поддръжка
-            </Link>
+            <Brand href="/staff" size={32} suffix="Табло" />
             {staff.role === "manager" && (
-              <Link href="/staff/assistant" className="text-sm text-blue-600 underline">
+              <Link href="/staff/assistant" className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-blue hover:bg-brand-blue/10">
                 Асистент
               </Link>
             )}

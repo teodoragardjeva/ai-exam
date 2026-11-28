@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/staff/LoginForm";
 import { getStaff } from "@/lib/staff";
@@ -10,12 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   if (await getStaff()) redirect("/staff");
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-16">
-      <header className="flex flex-col gap-1">
-        <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">HomeTech</p>
-        <h1 className="text-2xl font-semibold">Вход за служители</h1>
-      </header>
-      <LoginForm />
+    <main className="flex flex-1 items-center justify-center bg-gradient-to-br from-brand-navy via-[#0d3a8f] to-brand-blue px-4 py-16">
+      <div className="flex w-full max-w-sm flex-col gap-6 rounded-2xl bg-white p-8 shadow-2xl">
+        <header className="flex flex-col items-center gap-3 text-center">
+          <Image src="/logo.png" alt="HomeTech" width={168} height={128} priority />
+          <h1 className="text-xl font-semibold text-brand-navy">Вход за служители</h1>
+        </header>
+        <LoginForm />
+      </div>
     </main>
   );
 }

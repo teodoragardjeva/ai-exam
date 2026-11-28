@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+/* Light-only theme: the logo is drawn on white, so `dark:` classes only apply
+   under an explicit .dark ancestor (never set), not the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f8fc;
+  --foreground: #0b1f4d;
 }
 
 @theme inline {
@@ -10,17 +14,29 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* HomeTech brand, taken from the logo */
+  --color-brand-navy: #0b1f4d;
+  --color-brand-blue: #0a56d6;
+  --color-brand-sky: #2f8cf0;
+  --color-brand-cyan: #18c3dc;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Shared form controls (public forms + staff) */
+@layer components {
+  .field {
+    @apply h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-base text-brand-navy shadow-sm transition outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/15;
+  }
+  .field[aria-invalid="true"] {
+    @apply border-red-500 focus:border-red-500 focus:ring-red-500/15;
+  }
+  .btn-primary {
+    @apply inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-brand-blue to-brand-sky px-5 text-base font-semibold text-white shadow-md shadow-brand-blue/25 transition hover:brightness-110 focus-visible:ring-4 focus-visible:ring-brand-blue/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100;
+  }
 }
