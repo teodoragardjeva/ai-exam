@@ -77,7 +77,7 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         if: github.event_name == 'workflow_dispatch'
 
       - name: Tag must not exist yet (manual run)
@@ -95,8 +95,8 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: npm
@@ -116,7 +116,7 @@ jobs:
       TAG: ${{ needs.version.outputs.tag }}
       PRERELEASE: ${{ needs.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       # Manual run: tag the commit that was checked. A tag pushed with GITHUB_TOKEN
       # does not start this workflow again, so there is no second release run.
@@ -126,9 +126,9 @@ jobs:
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -136,7 +136,7 @@ jobs:
 
       - name: Image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository }}
           flavor: latest=false
@@ -146,7 +146,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
             type=raw,value=latest,enable=${{ needs.version.outputs.prerelease == 'false' }}
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: true
@@ -159,7 +159,7 @@ jobs:
 
       - name: n8n image tags
         id: meta-n8n
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository }}-n8n
           flavor: latest=false
@@ -169,7 +169,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.prerelease == 'false' }}
 
       - name: n8n image (workflows baked in)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: n8n
           push: true
@@ -179,7 +179,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=n8n
 
       - name: GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
           name: ${{ needs.version.outputs.tag }}
